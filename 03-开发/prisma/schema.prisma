@@ -1,0 +1,223 @@
+// ============================================================
+// HubForge - Prisma Schema
+// 多租户 SaaS 平台数据库设计
+// 隔离方案: PostgreSQL RLS + tenantId 字段
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 租户相关
+// ============================================================
+
+/// 租户 - 多租户系统的核心实体
+/// RLS 策略: 租户表本身不需要 tenantId（它是租户的根）
+model Tenant {
+  id             String   @id @default(cuid())
+  name           String   @db.VarChar(255)
+  slug           String   @unique @db.VarChar(100)
+  status         String   @default("active") @db.VarChar(20) // active | suspended
+  quotaUsers     Int      @default(100) // 最大用户数
+  quotaApps      Int      @default(50)  // 最大应用数
+  quotaOrgLevels Int      @default(5)   // 最大组织层级
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // 关联
+  users          User[]
+  departments    Department[]
+  apps           App[]
+  permissions    Permission[]
+  configs        TenantConfig[]
+
+  @@map("tenants")
+}
+
+/// 租户配置 - 功能开关、特性配置等键值对
+/// RLS 策略: tenantId = current_setting('app.tenant_id')
+model TenantConfig {
+  id       String @id @default(cuid())
+  tenantId String @db.Uuid
+  key      String @db.VarChar(100)
+  value    String @db.Text
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@map("tenant_configs")
+}
+
+// ============================================================
+// 用户相关
+// ============================================================
+
+/// 用户 - 系统用户，归属于某个租户
+/// RLS 策略: tenantId = current_setting('app.tenant_id')
+model User {
+  id           String   @id @default(cuid())
+  email        String   @db.VarChar(255)
+  passwordHash String   @db.VarChar(255)
+  name         String   @db.VarChar(100)
+  status       String   @default("active") @db.VarChar(20) // active | locked | invited
+  tenantId     String   @db.Uuid
+  departmentId String?  @db.Uuid
+  isGlobalAdmin Boolean @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关联
+  tenant                Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department            Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  grantedPermissions    UserPermission[]
+  grantedDeptPermissions DepartmentPermission[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([departmentId])
+  @@map("users")
+}
+
+// ============================================================
+// 组织架构
+// ============================================================
+
+/// 部门 - 支持无限层级的树形组织架构
+/// RLS 策略: tenantId = current_setting('app.tenant_id')
+model Department {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(255)
+  parentId  String?  @db.Uuid
+  tenantId  String   @db.Uuid
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联
+  tenant     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent     Department?           @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Department[]          @relation("DepartmentTree")
+  users      User[]
+  permissions DepartmentPermission[]
+
+  @@index([tenantId])
+  @@index([parentId])
+  @@map("departments")
+}
+
+// ============================================================
+// 权限相关
+// ============================================================
+
+/// 权限定义 - 两层权限体系
+/// 框架权限 (type=framework): 全局通用，tenantId 为 null
+/// 应用权限 (type=app): 租户域内，关联具体应用
+model Permission {
+  id     String  @id @default(cuid())
+  key    String  @db.VarChar(100) // 权限标识，如 user:read, app:manage
+  label  String  @db.VarChar(255) // 权限描述
+  type   String  @default("framework") @db.VarChar(20) // framework | app
+  tenantId String? @db.Uuid  // 框架权限为 null，应用权限必填
+  appId    String? @db.Uuid  // 应用权限关联的应用 ID
+
+  // 关联
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  app            App?                 @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userGrants     UserPermission[]
+  departmentGrants DepartmentPermission[]
+
+  @@unique([key, tenantId])
+  @@index([tenantId])
+  @@index([appId])
+  @@map("permissions")
+}
+
+/// 用户权限 - 用户与权限的多对多关系
+/// RLS 策略: 通过关联的 Permission.tenantId 间接隔离
+model UserPermission {
+  id           String   @id @default(cuid())
+  userId       String   @db.Uuid
+  permissionId String   @db.Uuid
+  grantedBy    String?  @db.Uuid // 授权人
+  grantedAt    DateTime @default(now())
+
+  // 关联
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granter    User?      @relation("PermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@map("user_permissions")
+}
+
+/// 部门权限 - 部门与权限的多对多关系
+model DepartmentPermission {
+  id           String   @id @default(cuid())
+  departmentId String   @db.Uuid
+  permissionId String   @db.Uuid
+  grantedBy    String?  @db.Uuid
+  grantedAt    DateTime @default(now())
+
+  // 关联
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  granter    User?      @relation("DeptPermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
+
+  @@unique([departmentId, permissionId])
+  @@index([departmentId])
+  @@index([permissionId])
+  @@map("department_permissions")
+}
+
+// ============================================================
+// 应用相关
+// ============================================================
+
+/// 应用 - HubForge 管理的子应用
+/// RLS 策略: tenantId = current_setting('app.tenant_id')
+model App {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(255)
+  slug        String   @db.VarChar(100)
+  type        String   @default("pc") @db.VarChar(10) // pc | h5 | both
+  description String?  @db.Text
+  icon        String?  @db.VarChar(500)
+  url         String   @db.VarChar(500)
+  tenantId    String   @db.Uuid
+  status      String   @default("active") @db.VarChar(20) // active | inactive
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  configs     AppConfig[]
+  permissions Permission[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("apps")
+}
+
+/// 应用配置 - 每个应用的键值对配置
+/// RLS 策略: 通过关联的 App.tenantId 间接隔离
+model AppConfig {
+  id    String @id @default(cuid())
+  appId String @db.Uuid
+  key   String @db.VarChar(100)
+  value String @db.Text
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, key])
+  @@index([appId])
+  @@map("app_configs")
+}
