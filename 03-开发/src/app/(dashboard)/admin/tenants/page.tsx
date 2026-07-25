@@ -35,7 +35,7 @@ export default function TenantsPage() {
       const res = await api.get<{ success: boolean; data: Tenant[] }>("/api/tenants");
       setTenants(res.data || []);
     } catch {
-      setError("加载失败");
+      setError("没加载出来，刷新试试");
     } finally {
       setLoading(false);
     }
@@ -56,7 +56,7 @@ export default function TenantsPage() {
       fetchTenants();
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "创建失败");
+      setError(apiErr.error || "没创建成功，再试一次？");
     } finally {
       setCreating(false);
     }
@@ -68,34 +68,34 @@ export default function TenantsPage() {
       await api.patch(`/api/tenants/${tenant.id}/status`, { status: newStatus });
       fetchTenants();
     } catch {
-      setError("操作失败");
+      setError("操作没成功，再试一次？");
     }
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">租户管理</h1>
+        <h1 className="text-2xl font-bold text-[#333]">租户管理</h1>
         <Button onClick={() => setShowCreate(true)}>+ 新建租户</Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
         </div>
       ) : tenants.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-lg">暂无租户</p>
-          <p className="text-sm mt-1">点击上方按钮创建第一个租户</p>
+          <p className="text-lg text-[#555]">还没有租户</p>
+          <p className="text-sm mt-1">点上面的按钮创建第一个租户</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -121,7 +121,7 @@ export default function TenantsPage() {
                       variant={t.status === "active" ? "danger" : "primary"}
                       onClick={() => toggleStatus(t)}
                     >
-                      {t.status === "active" ? "停用" : "启用"}
+                      {t.status === "active" ? "停掉" : "开起来"}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -138,7 +138,7 @@ export default function TenantsPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
-              取消
+              不了
             </Button>
             <Button loading={creating} onClick={handleCreate}>
               创建
@@ -151,7 +151,7 @@ export default function TenantsPage() {
             label="租户名称"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="输入租户名称"
+            placeholder="给租户起个名字"
             required
           />
         </form>

@@ -36,7 +36,7 @@ export default function UsersPage() {
       const res = await api.get<{ success: boolean; data: User[] }>("/api/users");
       setUsers(res.data || []);
     } catch {
-      setError("加载失败");
+      setError("没加载出来，刷新试试");
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,7 @@ export default function UsersPage() {
       fetchUsers();
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "创建失败");
+      setError(apiErr.error || "没创建成功，再试一次？");
     } finally {
       setCreating(false);
     }
@@ -72,26 +72,27 @@ export default function UsersPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">用户管理</h1>
-        <Button onClick={() => setShowCreate(true)}>+ 新建用户</Button>
+        <h1 className="text-2xl font-bold text-[#333]">用户管理</h1>
+        <Button onClick={() => setShowCreate(true)}>+ 添加用户</Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
         </div>
       ) : users.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-lg">暂无用户</p>
+          <p className="text-lg text-[#555]">还没有用户</p>
+          <p className="text-sm mt-1">点上面的按钮添加第一个用户</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -115,7 +116,7 @@ export default function UsersPage() {
                   <TableCell>{u.department?.name || "-"}</TableCell>
                   <TableCell>
                     <Button size="sm" variant="ghost">
-                      编辑
+                      改一下
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -128,14 +129,14 @@ export default function UsersPage() {
       <Modal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        title="新建用户"
+        title="添加用户"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
-              取消
+              不了
             </Button>
             <Button loading={creating} onClick={handleCreate}>
-              创建
+              添加
             </Button>
           </>
         }
@@ -153,7 +154,7 @@ export default function UsersPage() {
             label="姓名"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="用户姓名"
+            placeholder="填一下就行"
           />
           <Input
             label="初始密码"

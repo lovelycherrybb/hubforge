@@ -44,7 +44,7 @@ export function SearchInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-gray-50 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white"
+        className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-gray-50 placeholder:text-gray-400 text-[#333] focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] focus:border-[#1a1a2e] focus:bg-white"
       />
     </div>
   );

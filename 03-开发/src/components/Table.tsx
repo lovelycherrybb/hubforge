@@ -20,7 +20,7 @@ function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionEleme
 function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn("border-b border-gray-200 transition-colors hover:bg-gray-50", className)}
+      className={cn("border-b border-gray-100 transition-colors hover:bg-gray-50/70", className)}
       {...props}
     />
   );
@@ -30,7 +30,7 @@ function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
   return (
     <th
       className={cn(
-        "h-10 px-4 text-left align-middle font-medium text-gray-500 bg-gray-50",
+        "h-10 px-4 text-left align-middle font-medium text-[#555] bg-gray-50/50 text-xs uppercase tracking-wider",
         className
       )}
       {...props}
@@ -40,7 +40,7 @@ function TableHead({ className, ...props }: ThHTMLAttributes<HTMLTableCellElemen
 
 function TableCell({ className, ...props }: TdHTMLAttributes<HTMLTableCellElement>) {
   return (
-    <td className={cn("px-4 py-3 align-middle", className)} {...props} />
+    <td className={cn("px-4 py-3 align-middle text-[#333]", className)} {...props} />
   );
 }
 

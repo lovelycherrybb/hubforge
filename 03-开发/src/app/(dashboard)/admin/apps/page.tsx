@@ -44,7 +44,7 @@ export default function AppsPage() {
       const res = await api.get<{ success: boolean; data: App[] }>("/api/apps");
       setApps(res.data || []);
     } catch {
-      setError("加载失败");
+      setError("没加载出来，刷新试试");
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export default function AppsPage() {
       fetchApps();
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "创建失败");
+      setError(apiErr.error || "没创建成功，再试一次？");
     } finally {
       setCreating(false);
     }
@@ -82,34 +82,34 @@ export default function AppsPage() {
       await api.patch(`/api/apps/${app.id}`, { status: newStatus });
       fetchApps();
     } catch {
-      setError("操作失败");
+      setError("操作没成功，再试一次？");
     }
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">应用管理</h1>
-        <Button onClick={() => setShowCreate(true)}>+ 注册应用</Button>
+        <h1 className="text-2xl font-bold text-[#333]">应用管理</h1>
+        <Button onClick={() => setShowCreate(true)}>+ 注册新应用</Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
         </div>
       ) : apps.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
-          <p className="text-lg">暂无应用</p>
-          <p className="text-sm mt-1">点击上方按钮注册第一个应用</p>
+          <p className="text-lg text-[#555]">还没有应用</p>
+          <p className="text-sm mt-1">点上面的按钮注册第一个应用吧</p>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -154,7 +154,7 @@ export default function AppsPage() {
                       variant={app.status === "active" ? "danger" : "primary"}
                       onClick={() => toggleStatus(app)}
                     >
-                      {app.status === "active" ? "停用" : "启用"}
+                      {app.status === "active" ? "停掉" : "开起来"}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -167,12 +167,12 @@ export default function AppsPage() {
       <Modal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        title="注册应用"
+        title="注册新应用"
         size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
-              取消
+              不了
             </Button>
             <Button loading={creating} onClick={handleCreate}>
               注册
@@ -204,7 +204,7 @@ export default function AppsPage() {
             required
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[#333] mb-1">
               应用类型
             </label>
             <select
@@ -212,7 +212,7 @@ export default function AppsPage() {
               onChange={(e) =>
                 setForm({ ...form, type: e.target.value as "PC" | "H5" | "both" })
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-[#333] focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] focus:border-[#1a1a2e]"
             >
               <option value="PC">PC</option>
               <option value="H5">H5</option>

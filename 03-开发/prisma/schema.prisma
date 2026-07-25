@@ -41,7 +41,7 @@ model Tenant {
 /// 租户配置 - 功能开关、特性配置等键值对
 model TenantConfig {
   id       String @id @default(cuid())
-  tenantId String @db.Uuid
+  tenantId String
   key      String @db.VarChar(100)
   value    String @db.Text
 
@@ -62,8 +62,8 @@ model User {
   passwordHash String   @db.VarChar(255)
   name         String   @db.VarChar(100)
   status       String   @default("active") @db.VarChar(20) // active | locked | invited
-  tenantId     String   @db.Uuid
-  departmentId String?  @db.Uuid
+  tenantId     String  
+  departmentId String? 
   isGlobalAdmin Boolean @default(false)
   failedLoginAttempts Int      @default(0)
   lockedUntil         DateTime?
@@ -90,8 +90,8 @@ model User {
 model Department {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(255)
-  parentId  String?  @db.Uuid
-  tenantId  String   @db.Uuid
+  parentId  String? 
+  tenantId  String  
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -117,8 +117,8 @@ model Permission {
   key      String  @db.VarChar(100)
   label    String  @db.VarChar(255)
   type     String  @default("framework") @db.VarChar(20) // framework | app
-  tenantId String? @db.Uuid
-  appId    String? @db.Uuid
+  tenantId String?
+  appId    String?
 
   tenant           Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   app              App?                  @relation(fields: [appId], references: [id], onDelete: Cascade)
@@ -134,9 +134,9 @@ model Permission {
 /// 用户权限 - 用户与权限的多对多关系
 model UserPermission {
   id           String   @id @default(cuid())
-  userId       String   @db.Uuid
-  permissionId String   @db.Uuid
-  grantedBy    String?  @db.Uuid
+  userId       String  
+  permissionId String  
+  grantedBy    String? 
   grantedAt    DateTime @default(now())
 
   user       User       @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -152,9 +152,9 @@ model UserPermission {
 /// 部门权限 - 部门与权限的多对多关系
 model DepartmentPermission {
   id           String   @id @default(cuid())
-  departmentId String   @db.Uuid
-  permissionId String   @db.Uuid
-  grantedBy    String?  @db.Uuid
+  departmentId String  
+  permissionId String  
+  grantedBy    String? 
   grantedAt    DateTime @default(now())
 
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
@@ -180,7 +180,7 @@ model App {
   description String?  @db.Text
   icon        String?  @db.VarChar(500)
   url         String   @db.VarChar(500)
-  tenantId    String   @db.Uuid
+  tenantId    String  
   status      String   @default("active") @db.VarChar(20) // active | inactive
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
@@ -198,7 +198,7 @@ model App {
 /// 应用配置 - 每个应用的键值对配置
 model AppConfig {
   id    String @id @default(cuid())
-  appId String @db.Uuid
+  appId String
   key   String @db.VarChar(100)
   value String @db.Text
 

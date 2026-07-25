@@ -19,28 +19,30 @@ export function TopBar({ appName, onSearch, user }: TopBarProps) {
   const pathname = usePathname();
 
   return (
-    <header className="h-12 bg-white border-b border-gray-200 shadow-sm flex items-center px-4 gap-3 sticky top-0 z-40">
+    <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2 shrink-0">
-        <span className="text-xl">🏠</span>
-        <span className="font-bold text-gray-900 hidden sm:inline">HubForge</span>
+      <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
+        <span className="w-6 h-6 rounded bg-[#1a1a2e] flex items-center justify-center">
+          <span className="text-white text-xs font-bold">H</span>
+        </span>
+        <span className="font-bold text-[#1a1a2e] hidden sm:inline tracking-tight">HubForge</span>
       </Link>
 
       {/* Nav */}
-      <nav className="flex items-center gap-1 ml-2">
+      <nav className="flex items-center gap-1 ml-3">
         <Link
           href="/"
-          className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+          className={`px-3 py-1 rounded-md text-sm transition-colors ${
             pathname === "/"
-              ? "bg-blue-50 text-blue-700"
-              : "text-gray-600 hover:bg-gray-100"
+              ? "bg-[#1a1a2e]/5 text-[#1a1a2e] font-medium"
+              : "text-[#555] hover:bg-gray-100"
           }`}
         >
-          首页
+          全部应用
         </Link>
         {appName && (
-          <span className="px-3 py-1 text-sm text-gray-500">
-            / <span className="text-gray-900 font-medium ml-1">{appName}</span>
+          <span className="px-2 py-1 text-sm text-gray-400">
+            / <span className="text-[#333] font-medium ml-1">{appName}</span>
           </span>
         )}
       </nav>
@@ -50,7 +52,7 @@ export function TopBar({ appName, onSearch, user }: TopBarProps) {
 
       {/* Search - hidden on mobile */}
       <div className="hidden md:block w-64">
-        <SearchInput placeholder="搜索应用..." onSearch={onSearch} />
+        <SearchInput placeholder="找点什么？" onSearch={onSearch} />
       </div>
 
       {/* Admin link */}
@@ -59,10 +61,10 @@ export function TopBar({ appName, onSearch, user }: TopBarProps) {
           href="/admin/tenants"
           className={`p-1.5 rounded-md transition-colors ${
             pathname.startsWith("/admin")
-              ? "bg-blue-50 text-blue-700"
-              : "text-gray-500 hover:bg-gray-100"
+              ? "bg-[#1a1a2e]/5 text-[#1a1a2e]"
+              : "text-gray-400 hover:bg-gray-100 hover:text-[#333]"
           }`}
-          title="管理后台"
+          title="后台管理"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path

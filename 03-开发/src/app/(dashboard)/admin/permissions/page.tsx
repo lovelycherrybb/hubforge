@@ -46,7 +46,7 @@ export default function PermissionsPage() {
         setPermissions(permRes.data || []);
         setAssignments(assignRes.data || []);
       } catch {
-        setError("加载失败");
+        setError("没加载出来，刷新试试");
       } finally {
         setLoading(false);
       }
@@ -57,7 +57,7 @@ export default function PermissionsPage() {
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -65,20 +65,20 @@ export default function PermissionsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">权限管理</h1>
+        <h1 className="text-2xl font-bold text-[#333]">权限管理</h1>
         <Button>+ 分配权限</Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
       )}
 
       {/* Permissions list */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden mb-6">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
         <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">权限列表</h2>
+          <h2 className="text-sm font-semibold text-[#555]">权限定义</h2>
         </div>
         <Table>
           <TableHeader>
@@ -92,7 +92,7 @@ export default function PermissionsPage() {
             {permissions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-gray-400 py-8">
-                  暂无权限定义
+                  还没有定义权限
                 </TableCell>
               </TableRow>
             ) : (
@@ -113,15 +113,15 @@ export default function PermissionsPage() {
       </div>
 
       {/* Assignments */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-gray-700">已分配权限</h2>
+          <h2 className="text-sm font-semibold text-[#555]">已分配的权限</h2>
         </div>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>权限</TableHead>
-              <TableHead>分配对象</TableHead>
+              <TableHead>分配给谁</TableHead>
               <TableHead>类型</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,7 +129,7 @@ export default function PermissionsPage() {
             {assignments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-gray-400 py-8">
-                  暂无分配
+                  还没有分配权限
                 </TableCell>
               </TableRow>
             ) : (

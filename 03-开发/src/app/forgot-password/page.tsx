@@ -11,7 +11,6 @@ import { api } from "@/lib/api";
 export default function ForgotPasswordPage() {
   const router = useRouter();
 
-  // Step 1: enter email, Step 2: enter code + new password
   const [step, setStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -28,11 +27,11 @@ export default function ForgotPasswordPage() {
 
     try {
       await api.post("/api/auth/forgot-password", { email });
-      setSuccess("验证码已发送到您的邮箱");
+      setSuccess("验证码发到你邮箱了，去看看");
       setStep(2);
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "发送失败，请重试");
+      setError(apiErr.error || "发送失败，再试一次？");
     } finally {
       setLoading(false);
     }
@@ -43,7 +42,7 @@ export default function ForgotPasswordPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("两次输入的密码不一致");
+      setError("两次密码不一样");
       return;
     }
 
@@ -54,126 +53,132 @@ export default function ForgotPasswordPage() {
         code,
         newPassword,
       });
-      setSuccess("密码重置成功，即将跳转到登录页...");
+      setSuccess("密码改好了，马上跳转...");
       setTimeout(() => router.push("/login"), 1500);
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "重置失败，请重试");
+      setError(apiErr.error || "重置没成功，再试一次？");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="text-center">
-            <span className="text-3xl">🔑</span>
-            <h1 className="text-xl font-bold text-gray-900 mt-2">忘记密码</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {step === 1 ? "输入邮箱以重置密码" : "输入验证码和新密码"}
-            </p>
+    <div className="min-h-screen bg-[#fafafa] flex items-start justify-center pt-24 lg:pt-32 px-6">
+      <div className="w-full max-w-sm">
+        <div className="mb-8">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded bg-[#1a1a2e] flex items-center justify-center">
+              <span className="text-white text-xs font-bold">H</span>
+            </span>
+            <span className="font-bold text-[#1a1a2e] tracking-tight">HubForge</span>
           </div>
-        </CardHeader>
-        <CardContent>
-          {step === 1 ? (
-            <form onSubmit={handleSendCode} className="space-y-4">
-              {error && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
-                  {error}
-                </div>
-              )}
-              <Input
-                id="email"
-                label="邮箱"
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-              />
-              <Button type="submit" loading={loading} className="w-full">
-                发送验证码
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              {error && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
-                  {error}
-                </div>
-              )}
-              {success && (
-                <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-600">
-                  {success}
-                </div>
-              )}
-              <Input
-                id="code"
-                label="验证码"
-                type="text"
-                placeholder="输入6位验证码"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-                maxLength={6}
-              />
-              <Input
-                id="newPassword"
-                label="新密码"
-                type="password"
-                placeholder="至少8位"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-              />
-              <Input
-                id="confirmPassword"
-                label="确认新密码"
-                type="password"
-                placeholder="再次输入新密码"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                error={
-                  confirmPassword.length > 0 && newPassword !== confirmPassword
-                    ? "密码不一致"
-                    : undefined
-                }
-                autoComplete="new-password"
-              />
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setStep(1);
-                    setError("");
-                    setSuccess("");
-                  }}
-                  className="flex-1"
-                >
-                  返回
-                </Button>
-                <Button type="submit" loading={loading} className="flex-1">
-                  重置密码
-                </Button>
+        </div>
+
+        <h1 className="text-2xl font-bold text-[#333] mb-1">
+          {step === 1 ? "密码忘了？" : "设个新密码"}
+        </h1>
+        <p className="text-sm text-[#555] mb-8">
+          {step === 1 ? "输入你的邮箱，我们发个验证码给你。" : "验证码和新密码填好就行。"}
+        </p>
+
+        {step === 1 ? (
+          <form onSubmit={handleSendCode} className="space-y-4">
+            {error && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
+                {error}
               </div>
-            </form>
-          )}
-          <p className="mt-4 text-center text-sm text-gray-500">
-            <Link
-              href="/login"
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              返回登录
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+            )}
+            <Input
+              id="email"
+              label="邮箱"
+              type="email"
+              placeholder="you@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+            <Button type="submit" loading={loading} className="w-full">
+              发验证码
+            </Button>
+          </form>
+        ) : (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            {error && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+                {success}
+              </div>
+            )}
+            <Input
+              id="code"
+              label="验证码"
+              type="text"
+              placeholder="6位验证码"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              maxLength={6}
+            />
+            <Input
+              id="newPassword"
+              label="新密码"
+              type="password"
+              placeholder="至少8位"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+            <Input
+              id="confirmPassword"
+              label="再输一次"
+              type="password"
+              placeholder="确认新密码"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              error={
+                confirmPassword.length > 0 && newPassword !== confirmPassword
+                  ? "两次不一样"
+                  : undefined
+              }
+              autoComplete="new-password"
+            />
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setStep(1);
+                  setError("");
+                  setSuccess("");
+                }}
+                className="flex-1"
+              >
+                返回
+              </Button>
+              <Button type="submit" loading={loading} className="flex-1">
+                重置密码
+              </Button>
+            </div>
+          </form>
+        )}
+
+        <p className="mt-6 text-center text-sm text-[#555]">
+          <Link
+            href="/login"
+            className="text-[#1a1a2e] hover:underline font-medium"
+          >
+            回到登录
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

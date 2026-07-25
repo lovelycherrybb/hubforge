@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="fixed inset-0 bg-black/50" />
+      <div className="fixed inset-0 bg-black/40" />
       <div
         className={cn(
           "relative z-10 w-full mx-4 bg-white rounded-lg shadow-xl",
@@ -52,11 +52,11 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <h3 className="text-lg font-semibold text-[#333]">{title}</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-[#333] transition-colors"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -66,7 +66,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
         )}
         <div className="px-5 py-4">{children}</div>
         {footer && (
-          <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-lg flex justify-end gap-2">
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-lg flex justify-end gap-2">
             {footer}
           </div>
         )}

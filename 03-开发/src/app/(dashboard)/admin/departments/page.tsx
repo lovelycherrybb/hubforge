@@ -40,7 +40,7 @@ export default function DepartmentsPage() {
       );
       setTree(res.data || []);
     } catch {
-      setError("加载部门树失败");
+      setError("没加载出来，刷新试试");
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export default function DepartmentsPage() {
         );
         setSelectedDept(res.data);
       } catch {
-        setError("加载部门详情失败");
+        setError("加载部门详情没成功");
       }
     }
     fetchDept();
@@ -82,50 +82,50 @@ export default function DepartmentsPage() {
       fetchTree();
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
-      setError(apiErr.error || "创建失败");
+      setError(apiErr.error || "没创建成功，再试一次？");
     } finally {
       setCreating(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("确认删除此部门？")) return;
+    if (!confirm("确认删除这个部门？")) return;
     try {
       await api.delete(`/api/departments/${id}`);
       setSelectedId(null);
       fetchTree();
     } catch {
-      setError("删除失败");
+      setError("删不掉，再试一次？");
     }
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">组织架构</h1>
+        <h1 className="text-2xl font-bold text-[#333]">组织架构</h1>
         <Button onClick={() => setShowCreate(true)}>+ 新增部门</Button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+          <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
         </div>
       ) : (
         <div className="flex gap-6 h-[calc(100vh-220px)]">
           {/* Left: tree */}
-          <div className="w-72 bg-white rounded-lg border border-gray-200 shadow-sm overflow-y-auto shrink-0">
+          <div className="w-72 bg-white rounded-lg border border-gray-200 overflow-y-auto shrink-0">
             <div className="p-3 border-b border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700">部门结构</h3>
+              <h3 className="text-sm font-semibold text-[#555]">部门结构</h3>
             </div>
             <div className="p-2">
               {tree.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">暂无部门</p>
+                <p className="text-sm text-gray-400 text-center py-4">还没有部门</p>
               ) : (
                 <TreeView
                   data={tree}
@@ -137,21 +137,21 @@ export default function DepartmentsPage() {
           </div>
 
           {/* Right: detail */}
-          <div className="flex-1 bg-white rounded-lg border border-gray-200 shadow-sm overflow-auto">
+          <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-auto">
             {selectedDept ? (
               <div>
                 <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg font-semibold text-[#333]">
                       {selectedDept.name}
                     </h3>
-                    <p className="text-sm text-gray-500">
-                      {selectedDept.users?.length || 0} 名成员
+                    <p className="text-sm text-[#555]">
+                      {selectedDept.users?.length || 0} 人
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => setShowCreate(true)}>
-                      新增子部门
+                      加子部门
                     </Button>
                     <Button
                       size="sm"
@@ -180,7 +180,7 @@ export default function DepartmentsPage() {
                     ) : (
                       <TableRow>
                         <TableCell colSpan={2} className="text-center text-gray-400 py-8">
-                          暂无成员
+                          这个部门还没有人
                         </TableCell>
                       </TableRow>
                     )}
@@ -190,7 +190,7 @@ export default function DepartmentsPage() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
                 <svg
-                  className="w-12 h-12 mb-3"
+                  className="w-12 h-12 mb-3 opacity-40"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -202,7 +202,7 @@ export default function DepartmentsPage() {
                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   />
                 </svg>
-                <p>选择左侧部门查看详情</p>
+                <p className="text-[#555]">点左边的部门看看详情</p>
               </div>
             )}
           </div>
@@ -216,7 +216,7 @@ export default function DepartmentsPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
-              取消
+              不了
             </Button>
             <Button loading={creating} onClick={handleCreate}>
               创建
@@ -229,7 +229,7 @@ export default function DepartmentsPage() {
             label="部门名称"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="输入部门名称"
+            placeholder="给部门起个名字"
             required
           />
         </form>

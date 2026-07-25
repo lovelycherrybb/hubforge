@@ -40,14 +40,14 @@ export function UserMenu({ user }: UserMenuProps) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-medium hover:bg-blue-700 transition-colors"
+        className="w-8 h-8 rounded-full bg-[#1a1a2e] text-white flex items-center justify-center text-sm font-medium hover:bg-[#16213e] transition-colors"
       >
         {initials}
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
           <div className="px-4 py-2 border-b border-gray-100">
-            <p className="text-sm font-medium text-gray-900 truncate">
+            <p className="text-sm font-medium text-[#333] truncate">
               {user.name || user.email}
             </p>
             {user.name && (
@@ -57,15 +57,14 @@ export function UserMenu({ user }: UserMenuProps) {
           <button
             onClick={() => {
               setOpen(false);
-              // V1: just close
             }}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            className="w-full text-left px-4 py-2 text-sm text-[#555] hover:bg-gray-50"
           >
             个人信息
           </button>
           <button
             onClick={handleLogout}
-            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50"
+            className="w-full text-left px-4 py-2 text-sm text-[#e94560] hover:bg-gray-50"
           >
             退出登录
           </button>
