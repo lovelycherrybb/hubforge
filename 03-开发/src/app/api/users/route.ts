@@ -8,14 +8,19 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody, parseQuery, paginationSchema } from "@/lib/validate";
 import { success, created, error, forbidden, unauthorized, paginated } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
 
 const createUserSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(8)
+    .regex(/[a-z]/, "密码必须包含小写字母")
+    .regex(/[A-Z]/, "密码必须包含大写字母")
+    .regex(/[0-9]/, "密码必须包含数字"),
   name: z.string().min(1).max(50),
   departmentId: z.string().optional(),
   isGlobalAdmin: z.boolean().default(false),
@@ -27,18 +32,16 @@ const listQuerySchema = paginationSchema.extend({
   status: z.string().optional(),
 });
 
-/** 验证租户管理员身份 */
-async function requireTenantAdmin(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return { error: unauthorized() };
-  const payload = await verifyToken(token);
-  if (!payload) return { error: unauthorized("登录已过期") };
+/** 验证管理员身份（全局管理员或租户管理员） */
+async function requireAdmin(request: NextRequest) {
+  const payload = await getAuthUser(request);
+  if (!payload) return { error: unauthorized() };
   if (!payload.isGlobalAdmin) return { error: forbidden("仅限管理员") };
   return { payload };
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireTenantAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   const parsed = parseQuery(request, listQuerySchema);
@@ -87,7 +90,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireTenantAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   const parsed = await parseBody(request, createUserSchema);
@@ -104,6 +107,19 @@ export async function POST(request: NextRequest) {
         where: { email, tenantId: auth.payload.tenantId },
       });
       if (existing) return error("该邮箱在当前租户中已存在");
+
+      // 检查用户配额
+      const tenant = await db.tenant.findUnique({
+        where: { id: auth.payload.tenantId },
+      });
+      if (!tenant) return error("租户不存在");
+
+      const userCount = await db.user.count({
+        where: { tenantId: auth.payload.tenantId },
+      });
+      if (userCount >= tenant.quotaUsers) {
+        return error(`已达到用户数量上限 (${tenant.quotaUsers})`);
+      }
 
       const passwordHash = await bcrypt.hash(password, 12);
 

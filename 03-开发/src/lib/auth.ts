@@ -4,6 +4,7 @@
 // ============================================================
 
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
+import { NextRequest } from "next/server";
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "fallback-secret-do-not-use-in-production"
@@ -28,7 +29,7 @@ export async function signToken(payload: Omit<TokenPayload, "iat" | "exp">): Pro
   return new SignJWT(payload as unknown as JWTPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d") // 7 天过期
+    .setExpirationTime("24h")
     .sign(JWT_SECRET);
 }
 
@@ -44,6 +45,30 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * 从请求中提取并验证当前用户
+ * @param request - Next.js 请求对象
+ * @returns 解码后的 payload，未认证返回 null
+ */
+export async function getAuthUser(request: NextRequest): Promise<TokenPayload | null> {
+  const token = request.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  return verifyToken(token);
+}
+
+/**
+ * Cookie 配置（登录时使用）
+ */
+export function getCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge: 86400, // 24 小时
+    path: "/",
+  };
 }
 
 export { COOKIE_NAME };

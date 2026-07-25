@@ -1,12 +1,13 @@
 // ============================================================
 // GET /api/permissions/check — 检查当前用户权限
 // 权限要求：已认证用户
+// 检查逻辑：个人权限 ∪ 组织权限
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { success, error, unauthorized } from "@/lib/api-response";
 import { parseQuery } from "@/lib/validate";
 import { withTenantContext } from "@/lib/rls";
@@ -16,10 +17,8 @@ const checkQuerySchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
 
   const parsed = parseQuery(request, checkQuerySchema);
   if (!parsed.success) return error(parsed.error);
@@ -32,7 +31,7 @@ export async function GET(request: NextRequest) {
 
       // 全局管理员拥有所有权限
       if (payload.isGlobalAdmin) {
-        return success({ hasPermission: true, key });
+        return success({ hasPermission: true, key, source: "admin" });
       }
 
       // 查找权限定义

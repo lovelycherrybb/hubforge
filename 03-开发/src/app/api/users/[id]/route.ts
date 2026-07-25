@@ -9,25 +9,29 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, noContent, forbidden, notFound, unauthorized } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
 
 const updateUserSchema = z.object({
   email: z.string().email().optional(),
-  password: z.string().min(8).optional(),
+  password: z
+    .string()
+    .min(8)
+    .regex(/[a-z]/, "密码必须包含小写字母")
+    .regex(/[A-Z]/, "密码必须包含大写字母")
+    .regex(/[0-9]/, "密码必须包含数字")
+    .optional(),
   name: z.string().min(1).max(50).optional(),
   status: z.enum(["active", "locked", "invited"]).optional(),
   departmentId: z.string().nullable().optional(),
   isGlobalAdmin: z.boolean().optional(),
 });
 
-async function requireTenantAdmin(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return { error: unauthorized() };
-  const payload = await verifyToken(token);
-  if (!payload) return { error: unauthorized("登录已过期") };
+async function requireAdmin(request: NextRequest) {
+  const payload = await getAuthUser(request);
+  if (!payload) return { error: unauthorized() };
   if (!payload.isGlobalAdmin) return { error: forbidden("仅限管理员") };
   return { payload };
 }
@@ -36,7 +40,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await requireTenantAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   return withTenantContext(
@@ -56,7 +60,7 @@ export async function GET(
       if (!user) return notFound("用户不存在");
 
       // 脱敏返回
-      const { passwordHash, ...safeUser } = user;
+      const { passwordHash: _, ...safeUser } = user;
       return success({
         ...safeUser,
         permissions: user.grantedPermissions.map((up) => ({
@@ -73,7 +77,7 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await requireTenantAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   const parsed = await parseBody(request, updateUserSchema);
@@ -117,7 +121,7 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const auth = await requireTenantAdmin(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   // 不能删除自己

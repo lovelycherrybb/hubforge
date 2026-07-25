@@ -7,7 +7,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, forbidden, notFound, unauthorized } from "@/lib/api-response";
 
@@ -19,17 +19,15 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
   if (!payload.isGlobalAdmin) return forbidden("仅限平台管理员");
 
   const parsed = await parseBody(request, updateStatusSchema);
   if (!parsed.success) return error(parsed.error);
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
-  if (!tenant) return notFound("租户不存在");
+  if (!tenant || tenant.status === "deleted") return notFound("租户不存在");
 
   const updated = await db.tenant.update({
     where: { id: params.id },

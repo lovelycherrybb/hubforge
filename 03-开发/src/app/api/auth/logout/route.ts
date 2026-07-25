@@ -12,7 +12,7 @@ export async function POST() {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 0, // 立即过期
+    maxAge: 0,
     path: "/",
   });
 

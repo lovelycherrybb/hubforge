@@ -1,18 +1,26 @@
 // ============================================================
 // POST /api/auth/reset-password
-// 重置密码
+// 重置密码（邮箱 + 验证码 + 新密码）
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/prisma";
+import { COOKIE_NAME } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error } from "@/lib/api-response";
+import { cookies } from "next/headers";
 
 const resetPasswordSchema = z.object({
-  token: z.string().min(1, "重置令牌不能为空"),
-  password: z.string().min(8, "密码至少 8 个字符"),
+  email: z.string().email("邮箱格式不正确"),
+  code: z.string().length(6, "验证码必须为 6 位"),
+  password: z
+    .string()
+    .min(8, "密码至少 8 个字符")
+    .regex(/[a-z]/, "密码必须包含小写字母")
+    .regex(/[A-Z]/, "密码必须包含大写字母")
+    .regex(/[0-9]/, "密码必须包含数字"),
 });
 
 export async function POST(request: NextRequest) {
@@ -21,23 +29,57 @@ export async function POST(request: NextRequest) {
     return error(parsed.error);
   }
 
-  const { token, password } = parsed.data;
+  const { email, code, password } = parsed.data;
 
-  // TODO: 验证重置令牌
-  // 1. 从数据库/Redis 查找令牌
-  // 2. 检查是否过期
-  // 3. 获取关联的用户 ID
+  // 查找有效的验证码
+  const verification = await db.verificationCode.findFirst({
+    where: {
+      email,
+      code,
+      type: "reset_password",
+      used: false,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+  });
 
-  // 临时实现：令牌验证逻辑待实现
-  console.log(`[TODO] 验证重置令牌: ${token}`);
+  if (!verification) {
+    return error("验证码无效或已过期");
+  }
 
-  // 示例：假设令牌有效，更新密码
-  // const userId = await verifyResetToken(token);
-  // const passwordHash = await bcrypt.hash(password, 12);
-  // await db.user.update({
-  //   where: { id: userId },
-  //   data: { passwordHash },
-  // });
+  // 查找用户
+  const user = await db.user.findFirst({ where: { email } });
+  if (!user) {
+    return error("用户不存在");
+  }
+
+  // 标记验证码已使用 + 更新密码（事务）
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  await db.$transaction(async (tx) => {
+    await tx.verificationCode.update({
+      where: { id: verification.id },
+      data: { used: true },
+    });
+
+    await tx.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+  });
+
+  // 清除旧 Cookie
+  cookies().set(COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
 
   return success(null, "密码已重置，请重新登录");
 }

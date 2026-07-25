@@ -18,30 +18,27 @@ datasource db {
 // ============================================================
 
 /// 租户 - 多租户系统的核心实体
-/// RLS 策略: 租户表本身不需要 tenantId（它是租户的根）
 model Tenant {
   id             String   @id @default(cuid())
   name           String   @db.VarChar(255)
   slug           String   @unique @db.VarChar(100)
-  status         String   @default("active") @db.VarChar(20) // active | suspended
-  quotaUsers     Int      @default(100) // 最大用户数
-  quotaApps      Int      @default(50)  // 最大应用数
-  quotaOrgLevels Int      @default(5)   // 最大组织层级
+  status         String   @default("active") @db.VarChar(20) // active | suspended | deleted
+  quotaUsers     Int      @default(100)
+  quotaApps      Int      @default(50)
+  quotaOrgLevels Int      @default(5)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  // 关联
-  users          User[]
-  departments    Department[]
-  apps           App[]
-  permissions    Permission[]
-  configs        TenantConfig[]
+  users       User[]
+  departments Department[]
+  apps        App[]
+  permissions Permission[]
+  configs     TenantConfig[]
 
   @@map("tenants")
 }
 
 /// 租户配置 - 功能开关、特性配置等键值对
-/// RLS 策略: tenantId = current_setting('app.tenant_id')
 model TenantConfig {
   id       String @id @default(cuid())
   tenantId String @db.Uuid
@@ -59,7 +56,6 @@ model TenantConfig {
 // ============================================================
 
 /// 用户 - 系统用户，归属于某个租户
-/// RLS 策略: tenantId = current_setting('app.tenant_id')
 model User {
   id           String   @id @default(cuid())
   email        String   @db.VarChar(255)
@@ -69,14 +65,16 @@ model User {
   tenantId     String   @db.Uuid
   departmentId String?  @db.Uuid
   isGlobalAdmin Boolean @default(false)
+  failedLoginAttempts Int      @default(0)
+  lockedUntil         DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // 关联
-  tenant                Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  department            Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  grantedPermissions    UserPermission[]
-  grantedDeptPermissions DepartmentPermission[]
+  tenant                  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department              Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  grantedPermissions      UserPermission[]       @relation("UserPermissionUser")
+  grantingPermissions     UserPermission[]       @relation("PermissionGranter")
+  grantingDeptPermissions DepartmentPermission[]  @relation("DeptPermissionGranter")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -89,7 +87,6 @@ model User {
 // ============================================================
 
 /// 部门 - 支持无限层级的树形组织架构
-/// RLS 策略: tenantId = current_setting('app.tenant_id')
 model Department {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(255)
@@ -99,11 +96,10 @@ model Department {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 关联
-  tenant     Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parent     Department?           @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children   Department[]          @relation("DepartmentTree")
-  users      User[]
+  tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent      Department?           @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Department[]          @relation("DepartmentTree")
+  users       User[]
   permissions DepartmentPermission[]
 
   @@index([tenantId])
@@ -116,20 +112,17 @@ model Department {
 // ============================================================
 
 /// 权限定义 - 两层权限体系
-/// 框架权限 (type=framework): 全局通用，tenantId 为 null
-/// 应用权限 (type=app): 租户域内，关联具体应用
 model Permission {
-  id     String  @id @default(cuid())
-  key    String  @db.VarChar(100) // 权限标识，如 user:read, app:manage
-  label  String  @db.VarChar(255) // 权限描述
-  type   String  @default("framework") @db.VarChar(20) // framework | app
-  tenantId String? @db.Uuid  // 框架权限为 null，应用权限必填
-  appId    String? @db.Uuid  // 应用权限关联的应用 ID
+  id       String  @id @default(cuid())
+  key      String  @db.VarChar(100)
+  label    String  @db.VarChar(255)
+  type     String  @default("framework") @db.VarChar(20) // framework | app
+  tenantId String? @db.Uuid
+  appId    String? @db.Uuid
 
-  // 关联
-  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  app            App?                 @relation(fields: [appId], references: [id], onDelete: Cascade)
-  userGrants     UserPermission[]
+  tenant           Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  app              App?                  @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userGrants       UserPermission[]
   departmentGrants DepartmentPermission[]
 
   @@unique([key, tenantId])
@@ -139,16 +132,14 @@ model Permission {
 }
 
 /// 用户权限 - 用户与权限的多对多关系
-/// RLS 策略: 通过关联的 Permission.tenantId 间接隔离
 model UserPermission {
   id           String   @id @default(cuid())
   userId       String   @db.Uuid
   permissionId String   @db.Uuid
-  grantedBy    String?  @db.Uuid // 授权人
+  grantedBy    String?  @db.Uuid
   grantedAt    DateTime @default(now())
 
-  // 关联
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User       @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   granter    User?      @relation("PermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
 
@@ -166,7 +157,6 @@ model DepartmentPermission {
   grantedBy    String?  @db.Uuid
   grantedAt    DateTime @default(now())
 
-  // 关联
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   granter    User?      @relation("DeptPermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
@@ -182,7 +172,6 @@ model DepartmentPermission {
 // ============================================================
 
 /// 应用 - HubForge 管理的子应用
-/// RLS 策略: tenantId = current_setting('app.tenant_id')
 model App {
   id          String   @id @default(cuid())
   name        String   @db.VarChar(255)
@@ -197,7 +186,6 @@ model App {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // 关联
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   configs     AppConfig[]
   permissions Permission[]
@@ -208,7 +196,6 @@ model App {
 }
 
 /// 应用配置 - 每个应用的键值对配置
-/// RLS 策略: 通过关联的 App.tenantId 间接隔离
 model AppConfig {
   id    String @id @default(cuid())
   appId String @db.Uuid
@@ -220,4 +207,23 @@ model AppConfig {
   @@unique([appId, key])
   @@index([appId])
   @@map("app_configs")
+}
+
+// ============================================================
+// 验证码
+// ============================================================
+
+/// 验证码 - 用于密码重置等场景
+model VerificationCode {
+  id        String   @id @default(cuid())
+  email     String   @db.VarChar(255)
+  code      String   @db.VarChar(6)
+  type      String   @default("reset_password") @db.VarChar(30)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, code])
+  @@index([expiresAt])
+  @@map("verification_codes")
 }

@@ -1,22 +1,21 @@
 // ============================================================
 // POST /api/permissions/assign — 分配权限（用户/部门）
 // 权限要求：租户管理员
+// 类型隔离：租户管理员不能分配框架权限
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, forbidden, unauthorized } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
 
 const assignPermissionSchema = z.object({
   permissionId: z.string().min(1),
-  // 二选一：分配给用户或部门
   userId: z.string().optional(),
   departmentId: z.string().optional(),
-  // 操作类型
   action: z.enum(["grant", "revoke"]),
 }).refine(
   (data) => data.userId || data.departmentId,
@@ -24,10 +23,8 @@ const assignPermissionSchema = z.object({
 );
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
   if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, assignPermissionSchema);
@@ -50,6 +47,11 @@ export async function POST(request: NextRequest) {
         },
       });
       if (!permission) return error("权限不存在");
+
+      // 类型隔离：非平台管理员不能操作框架权限
+      if (permission.type === "framework" && !payload.isGlobalAdmin) {
+        return forbidden("租户管理员不能分配框架权限");
+      }
 
       if (action === "grant") {
         if (userId) {

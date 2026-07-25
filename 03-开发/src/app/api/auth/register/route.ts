@@ -7,7 +7,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/prisma";
-import { signToken, COOKIE_NAME } from "@/lib/auth";
+import { signToken, COOKIE_NAME, getCookieOptions } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error } from "@/lib/api-response";
 import { cookies } from "next/headers";
@@ -20,7 +20,12 @@ const registerSchema = z.object({
     .max(50)
     .regex(/^[a-z0-9-]+$/, "slug 只能包含小写字母、数字和连字符"),
   email: z.string().email("邮箱格式不正确"),
-  password: z.string().min(8, "密码至少 8 个字符"),
+  password: z
+    .string()
+    .min(8, "密码至少 8 个字符")
+    .regex(/[a-z]/, "密码必须包含小写字母")
+    .regex(/[A-Z]/, "密码必须包含大写字母")
+    .regex(/[0-9]/, "密码必须包含数字"),
   name: z.string().min(1, "姓名不能为空").max(50),
 });
 
@@ -40,7 +45,7 @@ export async function POST(request: NextRequest) {
     return error("该租户标识已被占用");
   }
 
-  // 检查邮箱是否已存在
+  // 检查邮箱是否已存在（全局）
   const existingUser = await db.user.findFirst({ where: { email } });
   if (existingUser) {
     return error("该邮箱已被注册");
@@ -65,6 +70,7 @@ export async function POST(request: NextRequest) {
         name,
         tenantId: tenant.id,
         isGlobalAdmin: true, // 注册的第一个用户为管理员
+        status: "active",
       },
     });
 
@@ -80,13 +86,7 @@ export async function POST(request: NextRequest) {
   });
 
   // 设置 httpOnly Cookie
-  cookies().set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 7, // 7 天
-    path: "/",
-  });
+  cookies().set(COOKIE_NAME, token, getCookieOptions());
 
   return success(
     {

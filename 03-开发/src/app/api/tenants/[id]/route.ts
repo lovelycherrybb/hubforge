@@ -1,14 +1,14 @@
 // ============================================================
 // GET    /api/tenants/:id   — 租户详情
 // PUT    /api/tenants/:id   — 更新租户
-// DELETE /api/tenants/:id   — 删除租户
+// DELETE /api/tenants/:id   — 软删除租户
 // 权限要求：全局管理员
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, noContent, forbidden, notFound, unauthorized } from "@/lib/api-response";
 
@@ -20,10 +20,8 @@ const updateTenantSchema = z.object({
 });
 
 async function requireGlobalAdmin(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return { error: unauthorized() };
-  const payload = await verifyToken(token);
-  if (!payload) return { error: unauthorized("登录已过期") };
+  const payload = await getAuthUser(request);
+  if (!payload) return { error: unauthorized() };
   if (!payload.isGlobalAdmin) return { error: forbidden("仅限平台管理员") };
   return { payload };
 }
@@ -43,7 +41,7 @@ export async function GET(
     },
   });
 
-  if (!tenant) return notFound("租户不存在");
+  if (!tenant || tenant.status === "deleted") return notFound("租户不存在");
   return success(tenant);
 }
 
@@ -58,7 +56,7 @@ export async function PUT(
   if (!parsed.success) return error(parsed.error);
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
-  if (!tenant) return notFound("租户不存在");
+  if (!tenant || tenant.status === "deleted") return notFound("租户不存在");
 
   const updated = await db.tenant.update({
     where: { id: params.id },
@@ -76,10 +74,13 @@ export async function DELETE(
   if (auth.error) return auth.error;
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
-  if (!tenant) return notFound("租户不存在");
+  if (!tenant || tenant.status === "deleted") return notFound("租户不存在");
 
-  // 级联删除租户及其所有数据
-  await db.tenant.delete({ where: { id: params.id } });
+  // 软删除：标记为 deleted
+  await db.tenant.update({
+    where: { id: params.id },
+    data: { status: "deleted" },
+  });
 
   return noContent();
 }

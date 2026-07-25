@@ -1,19 +1,17 @@
 // ============================================================
-// GET /api/permissions — 权限列表
+// GET /api/permissions — 权限列表（区分框架权限和应用权限）
 // 权限要求：已认证用户
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { success, unauthorized } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
 
   return withTenantContext(
     payload.tenantId,
@@ -33,7 +31,11 @@ export async function GET(request: NextRequest) {
         orderBy: [{ type: "asc" }, { key: "asc" }],
       });
 
-      return success(permissions);
+      // 分组返回
+      const framework = permissions.filter((p) => p.type === "framework");
+      const app = permissions.filter((p) => p.type === "app");
+
+      return success({ framework, app, all: permissions });
     }
   );
 }

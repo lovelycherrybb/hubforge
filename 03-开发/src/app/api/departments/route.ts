@@ -6,7 +6,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, created, error, forbidden, unauthorized } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
@@ -18,10 +18,8 @@ const createDepartmentSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
   if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, createDepartmentSchema);
@@ -40,13 +38,13 @@ export async function POST(request: NextRequest) {
         });
         if (!tenant) return error("租户不存在");
 
-        // 计算当前层级
         let level = 1;
         let currentParentId: string | null = parentId;
         while (currentParentId) {
-          const parent = await db.department.findUnique({
-            where: { id: currentParentId },
-          });
+          const parent: { id: string; parentId: string | null } | null =
+            await db.department.findUnique({
+              where: { id: currentParentId },
+            });
           if (!parent) return error("父部门不存在");
           currentParentId = parent.parentId;
           level++;

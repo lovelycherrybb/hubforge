@@ -1,22 +1,17 @@
 // ============================================================
 // GET /api/auth/me
-// 获取当前登录用户信息
+// 获取当前登录用户信息（含权限列表）
 // ============================================================
 
 import { NextRequest } from "next/server";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { success, unauthorized } from "@/lib/api-response";
 
 export async function GET(request: NextRequest) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) {
-    return unauthorized();
-  }
-
-  const payload = await verifyToken(token);
+  const payload = await getAuthUser(request);
   if (!payload) {
-    return unauthorized("登录已过期，请重新登录");
+    return unauthorized();
   }
 
   const user = await db.user.findUnique({
@@ -34,6 +29,32 @@ export async function GET(request: NextRequest) {
     return unauthorized("用户不存在");
   }
 
+  // 合并个人权限 + 部门权限
+  const personalPermissions = user.grantedPermissions.map((up) => ({
+    key: up.permission.key,
+    label: up.permission.label,
+    type: up.permission.type,
+  }));
+
+  let departmentPermissions: { key: string; label: string; type: string }[] = [];
+  if (user.departmentId) {
+    const deptPerms = await db.departmentPermission.findMany({
+      where: { departmentId: user.departmentId },
+      include: { permission: true },
+    });
+    departmentPermissions = deptPerms.map((dp) => ({
+      key: dp.permission.key,
+      label: dp.permission.label,
+      type: dp.permission.type,
+    }));
+  }
+
+  // 去重合并（个人权限 ∪ 部门权限）
+  const permMap = new Map<string, { key: string; label: string; type: string }>();
+  for (const p of [...personalPermissions, ...departmentPermissions]) {
+    permMap.set(p.key, p);
+  }
+
   return success({
     id: user.id,
     email: user.email,
@@ -48,10 +69,6 @@ export async function GET(request: NextRequest) {
     department: user.department
       ? { id: user.department.id, name: user.department.name }
       : null,
-    permissions: user.grantedPermissions.map((up) => ({
-      key: up.permission.key,
-      label: up.permission.label,
-      type: up.permission.type,
-    })),
+    permissions: Array.from(permMap.values()),
   });
 }

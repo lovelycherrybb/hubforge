@@ -6,7 +6,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/prisma";
-import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, forbidden, notFound, unauthorized } from "@/lib/api-response";
 import { withTenantContext } from "@/lib/rls";
@@ -19,10 +19,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const token = request.cookies.get(COOKIE_NAME)?.value;
-  if (!token) return unauthorized();
-  const payload = await verifyToken(token);
-  if (!payload) return unauthorized("登录已过期");
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
   if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, assignUsersSchema);
@@ -38,7 +36,7 @@ export async function POST(
       if (!dept) return notFound("部门不存在");
 
       // 批量更新用户的部门
-      await db.user.updateMany({
+      const result = await db.user.updateMany({
         where: {
           id: { in: parsed.data.userIds },
           tenantId: payload.tenantId,
@@ -46,7 +44,10 @@ export async function POST(
         data: { departmentId: params.id },
       });
 
-      return success(null, `已将 ${parsed.data.userIds.length} 个用户分配到 ${dept.name}`);
+      return success(
+        { updatedCount: result.count },
+        `已将 ${result.count} 个用户分配到 ${dept.name}`
+      );
     }
   );
 }
