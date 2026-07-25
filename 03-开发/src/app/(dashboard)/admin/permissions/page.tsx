@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/Button";
 import { Badge } from "@/components/Badge";
 import {
   Table,
@@ -15,36 +14,30 @@ import { api } from "@/lib/api";
 
 interface Permission {
   id: string;
-  name: string;
-  code: string;
-  description?: string;
+  key: string;
+  label: string;
+  type: string;
+  app?: { id: string; name: string } | null;
 }
 
-interface Assignment {
-  id: string;
-  userId?: string;
-  departmentId?: string;
-  permissionId: string;
-  user?: { email: string; name?: string };
-  department?: { name: string };
-  permission?: { name: string; code: string };
+interface PermissionsResponse {
+  framework: Permission[];
+  app: Permission[];
+  all: Permission[];
 }
 
 export default function PermissionsPage() {
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [data, setData] = useState<PermissionsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [permRes, assignRes] = await Promise.all([
-          api.get<{ success: boolean; data: Permission[] }>("/api/permissions"),
-          api.get<{ success: boolean; data: Assignment[] }>("/api/permissions?include=assignments"),
-        ]);
-        setPermissions(permRes.data || []);
-        setAssignments(assignRes.data || []);
+        const res = await api.get<{ success: boolean; data: PermissionsResponse }>(
+          "/api/permissions"
+        );
+        setData(res.data);
       } catch {
         setError("没加载出来，刷新试试");
       } finally {
@@ -62,97 +55,83 @@ export default function PermissionsPage() {
     );
   }
 
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-[#333]">权限管理</h1>
-        <Button>+ 分配权限</Button>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Permissions list */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-[#555]">权限定义</h2>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>编码</TableHead>
-              <TableHead>描述</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {permissions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center text-gray-400 py-8">
-                  还没有定义权限
-                </TableCell>
-              </TableRow>
-            ) : (
-              permissions.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell>
-                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">
-                      {p.code}
-                    </code>
-                  </TableCell>
-                  <TableCell className="text-gray-500">{p.description || "-"}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+  return (
+    <div className="p-6 space-y-8">
+      <div>
+        <h1 className="text-xl font-bold text-[#333]">权限管理</h1>
+        <p className="text-sm text-[#555] mt-1">
+          框架权限由平台控制，应用权限由租户自己管理
+        </p>
       </div>
 
-      {/* Assignments */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100">
-          <h2 className="text-sm font-semibold text-[#555]">已分配的权限</h2>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>权限</TableHead>
-              <TableHead>分配给谁</TableHead>
-              <TableHead>类型</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assignments.length === 0 ? (
+      {/* 框架权限 */}
+      <div>
+        <h2 className="text-lg font-semibold text-[#333] mb-3">框架权限</h2>
+        {data?.framework?.length ? (
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-gray-400 py-8">
-                  还没有分配权限
-                </TableCell>
+                <TableHead>权限标识</TableHead>
+                <TableHead>名称</TableHead>
+                <TableHead>类型</TableHead>
               </TableRow>
-            ) : (
-              assignments.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">
-                    {a.permission?.name || a.permissionId}
-                  </TableCell>
+            </TableHeader>
+            <TableBody>
+              {data.framework.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-mono text-sm">{p.key}</TableCell>
+                  <TableCell>{p.label}</TableCell>
                   <TableCell>
-                    {a.user
-                      ? `${a.user.name || a.user.email}`
-                      : a.department?.name || a.departmentId}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={a.user ? "info" : "default"}>
-                      {a.user ? "用户" : "部门"}
-                    </Badge>
+                    <Badge variant="info">框架</Badge>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-gray-400">还没有框架权限</p>
+        )}
+      </div>
+
+      {/* 应用权限 */}
+      <div>
+        <h2 className="text-lg font-semibold text-[#333] mb-3">应用权限</h2>
+        {data?.app?.length ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>权限标识</TableHead>
+                <TableHead>名称</TableHead>
+                <TableHead>所属应用</TableHead>
+                <TableHead>类型</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.app.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-mono text-sm">{p.key}</TableCell>
+                  <TableCell>{p.label}</TableCell>
+                  <TableCell>{p.app?.name || "-"}</TableCell>
+                  <TableCell>
+                    <Badge variant="default">应用</Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-gray-400">还没有应用权限</p>
+        )}
       </div>
     </div>
   );

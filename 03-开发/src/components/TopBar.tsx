@@ -12,11 +12,14 @@ interface TopBarProps {
     email: string;
     name?: string;
     isGlobalAdmin?: boolean;
+    isTenantAdmin?: boolean;
+    tenant?: { name: string };
   };
 }
 
 export function TopBar({ appName, onSearch, user }: TopBarProps) {
   const pathname = usePathname();
+  const showAdmin = user?.isGlobalAdmin || user?.isTenantAdmin;
 
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">
@@ -55,10 +58,10 @@ export function TopBar({ appName, onSearch, user }: TopBarProps) {
         <SearchInput placeholder="找点什么？" onSearch={onSearch} />
       </div>
 
-      {/* Admin link */}
-      {user?.isGlobalAdmin && (
+      {/* Admin link - show for both global admin and tenant admin */}
+      {showAdmin && (
         <Link
-          href="/admin/tenants"
+          href="/admin/users"
           className={`p-1.5 rounded-md transition-colors ${
             pathname.startsWith("/admin")
               ? "bg-[#1a1a2e]/5 text-[#1a1a2e]"

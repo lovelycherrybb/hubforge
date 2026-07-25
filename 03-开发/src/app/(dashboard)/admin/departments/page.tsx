@@ -29,6 +29,7 @@ export default function DepartmentsPage() {
   const [selectedDept, setSelectedDept] = useState<Department | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -68,6 +69,12 @@ export default function DepartmentsPage() {
     fetchDept();
   }, [selectedId]);
 
+  const openCreateModal = (parentId: string | null) => {
+    setCreateParentId(parentId);
+    setNewName("");
+    setShowCreate(true);
+  };
+
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     setCreating(true);
@@ -75,7 +82,7 @@ export default function DepartmentsPage() {
     try {
       await api.post("/api/departments", {
         name: newName,
-        parentId: selectedId || null,
+        parentId: createParentId,
       });
       setShowCreate(false);
       setNewName("");
@@ -100,10 +107,10 @@ export default function DepartmentsPage() {
   };
 
   return (
-    <div>
+    <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-[#333]">组织架构</h1>
-        <Button onClick={() => setShowCreate(true)}>+ 新增部门</Button>
+        <h1 className="text-xl font-bold text-[#333]">组织架构</h1>
+        <Button onClick={() => openCreateModal(null)}>+ 新增一级部门</Button>
       </div>
 
       {error && (
@@ -137,24 +144,24 @@ export default function DepartmentsPage() {
           </div>
 
           {/* Right: detail */}
-          <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-auto">
+          <div className="flex-1 bg-white rounded-lg border border-gray-200 overflow-hidden">
             {selectedDept ? (
-              <div>
-                <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="h-full flex flex-col">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-semibold text-[#333]">
-                      {selectedDept.name}
-                    </h3>
-                    <p className="text-sm text-[#555]">
+                    <h2 className="text-lg font-semibold text-[#333]">{selectedDept.name}</h2>
+                    <p className="text-xs text-gray-400 mt-0.5">
                       {selectedDept.users?.length || 0} 人
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => setShowCreate(true)}>
-                      加子部门
+                    <Button
+                      variant="secondary"
+                      onClick={() => openCreateModal(selectedDept.id)}
+                    >
+                      + 子部门
                     </Button>
                     <Button
-                      size="sm"
                       variant="danger"
                       onClick={() => handleDelete(selectedDept.id)}
                     >
@@ -162,30 +169,29 @@ export default function DepartmentsPage() {
                     </Button>
                   </div>
                 </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>姓名</TableHead>
-                      <TableHead>邮箱</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedDept.users && selectedDept.users.length > 0 ? (
-                      selectedDept.users.map((u) => (
-                        <TableRow key={u.id}>
-                          <TableCell>{u.name || "-"}</TableCell>
-                          <TableCell>{u.email}</TableCell>
+                <div className="flex-1 overflow-y-auto p-6">
+                  <h3 className="text-sm font-medium text-[#555] mb-3">成员列表</h3>
+                  {selectedDept.users && selectedDept.users.length > 0 ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>姓名</TableHead>
+                          <TableHead>邮箱</TableHead>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={2} className="text-center text-gray-400 py-8">
-                          这个部门还没有人
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedDept.users.map((u) => (
+                          <TableRow key={u.id}>
+                            <TableCell>{u.name || "-"}</TableCell>
+                            <TableCell className="text-gray-500">{u.email}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm text-gray-400">这个部门还没有人</p>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -212,11 +218,11 @@ export default function DepartmentsPage() {
       <Modal
         open={showCreate}
         onClose={() => setShowCreate(false)}
-        title={selectedId ? "新增子部门" : "新增部门"}
+        title={createParentId ? "新增子部门" : "新增一级部门"}
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
-              不了
+              取消
             </Button>
             <Button loading={creating} onClick={handleCreate}>
               创建

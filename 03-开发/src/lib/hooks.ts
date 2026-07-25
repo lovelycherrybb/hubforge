@@ -10,6 +10,9 @@ interface User {
   name?: string;
   tenantId: string;
   isGlobalAdmin: boolean;
+  tenant?: { id: string; name: string; slug: string };
+  department?: { id: string; name: string } | null;
+  permissions?: { key: string; label: string }[];
 }
 
 export function useUser() {

@@ -15,7 +15,7 @@ export default function DashboardLayout({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -24,7 +24,12 @@ export default function DashboardLayout({
 
   // Determine current app name from path
   const appMatch = pathname.match(/^\/app\/([^/]+)/);
-  const appName = appMatch ? undefined : undefined; // Will be set by child page via context later
+  const appName = appMatch ? undefined : undefined;
+
+  // Check if user is tenant admin (has tenant.admin permission or is global admin)
+  const isTenantAdmin = user.isGlobalAdmin || user.permissions?.some(
+    (p: { key?: string }) => p?.key === "tenant.admin"
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -34,6 +39,8 @@ export default function DashboardLayout({
           email: user.email,
           name: user.name,
           isGlobalAdmin: user.isGlobalAdmin,
+          isTenantAdmin,
+          tenant: user.tenant,
         }}
       />
       <main className="h-[calc(100vh-48px)]">{children}</main>
