@@ -6,9 +6,11 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { NextRequest } from "next/server";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-do-not-use-in-production"
-);
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET 环境变量未设置，服务无法启动");
+}
+
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 const COOKIE_NAME = process.env.COOKIE_NAME || "hubforge-token";
 

@@ -57,7 +57,7 @@ export default function PermissionsPage() {
 
   if (error) {
     return (
-      <div className="p-6">
+      <div>
         <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
           {error}
         </div>
@@ -66,7 +66,7 @@ export default function PermissionsPage() {
   }
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="space-y-8">
       <div>
         <h1 className="text-xl font-bold text-[#333]">权限管理</h1>
         <p className="text-sm text-[#555] mt-1">

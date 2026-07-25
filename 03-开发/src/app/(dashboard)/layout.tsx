@@ -2,7 +2,8 @@
 
 import { useUser } from "@/lib/hooks";
 import { TopBar } from "@/components/TopBar";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function DashboardLayout({
   children,
@@ -11,6 +12,13 @@ export default function DashboardLayout({
 }) {
   const { user, loading } = useUser();
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
 
   if (loading) {
     return (
@@ -20,11 +28,17 @@ export default function DashboardLayout({
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   // Determine current app name from path
   const appMatch = pathname.match(/^\/app\/([^/]+)/);
-  const appName = appMatch ? undefined : undefined;
+  const appName = appMatch ? decodeURIComponent(appMatch[1]) : undefined;
 
   // Check if user is tenant admin (has tenant.admin permission or is global admin)
   const isTenantAdmin = user.isGlobalAdmin || user.permissions?.some(

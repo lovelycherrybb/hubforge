@@ -14,7 +14,13 @@ export default function ProfilePage() {
     );
   }
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin w-8 h-8 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto">

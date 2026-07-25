@@ -31,10 +31,16 @@ export async function POST(request: NextRequest) {
 
   const { email, code, password } = parsed.data;
 
-  // 查找有效的验证码
-  const verification = await db.verificationCode.findFirst({
+  // 查找用户（限定租户隔离：先通过邮箱获取用户及其租户ID）
+  const user = await db.user.findFirst({ where: { email } });
+  if (!user) {
+    return error("用户不存在");
+  }
+
+  // 二次校验：确保验证码确实关联到该用户的邮箱（租户内）
+  const verificationCheck = await db.verificationCode.findFirst({
     where: {
-      email,
+      email: user.email,
       code,
       type: "reset_password",
       used: false,
@@ -43,15 +49,11 @@ export async function POST(request: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  if (!verification) {
+  if (!verificationCheck) {
     return error("验证码无效或已过期");
   }
 
-  // 查找用户
-  const user = await db.user.findFirst({ where: { email } });
-  if (!user) {
-    return error("用户不存在");
-  }
+  const verification = verificationCheck;
 
   // 标记验证码已使用 + 更新密码（事务）
   const passwordHash = await bcrypt.hash(password, 12);

@@ -25,6 +25,8 @@ function getPasswordStrength(password: string): { label: string; color: string; 
 export default function RegisterPage() {
   const router = useRouter();
 
+  const [name, setName] = useState("");
+  const [tenantName, setTenantName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -45,7 +47,21 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await api.post("/api/auth/register", { email, password });
+      // 自动生成 tenantSlug（团队名称转 kebab-case）
+      const tenantSlug = tenantName
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9\u4e00-\u9fff-]/g, "")
+        || "default";
+
+      await api.post("/api/auth/register", {
+        name,
+        email,
+        password,
+        tenantName,
+        tenantSlug,
+      });
       router.push("/login");
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
@@ -90,6 +106,25 @@ export default function RegisterPage() {
               </div>
             )}
             <Input
+              id="name"
+              label="姓名"
+              type="text"
+              placeholder="你的名字"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoComplete="name"
+            />
+            <Input
+              id="tenantName"
+              label="团队名称"
+              type="text"
+              placeholder="你的团队或公司名"
+              value={tenantName}
+              onChange={(e) => setTenantName(e.target.value)}
+              required
+            />
+            <Input
               id="email"
               label="邮箱"
               type="email"
@@ -104,12 +139,15 @@ export default function RegisterPage() {
                 id="password"
                 label="密码"
                 type="password"
-                placeholder="至少8位"
+                placeholder="8位以上，含大小写字母和数字"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoComplete="new-password"
               />
+              <p className="text-xs text-gray-400 mt-1">
+                密码要求：至少8位，包含大写字母、小写字母和数字
+              </p>
               {password.length > 0 && (
                 <div className="mt-2">
                   <div className="flex items-center gap-2">

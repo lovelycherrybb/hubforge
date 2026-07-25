@@ -87,7 +87,7 @@ export default function AppViewPage() {
       ref={iframeRef}
       src={app.url}
       className="w-full h-full border-0"
-      sandbox="allow-same-origin allow-scripts allow-forms"
+      sandbox="allow-scripts allow-forms"
       title={app.name}
     />
   );

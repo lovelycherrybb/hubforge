@@ -37,7 +37,7 @@ function TreeNodeItem({
         className={cn(
           "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer text-sm",
           isSelected
-            ? "bg-blue-50 text-blue-700 font-medium"
+            ? "bg-[#1a1a2e]/5 text-[#1a1a2e] font-medium"
             : "text-gray-700 hover:bg-gray-100"
         )}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}

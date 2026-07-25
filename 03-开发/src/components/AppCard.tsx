@@ -9,7 +9,7 @@ interface App {
   slug: string;
   description?: string;
   icon?: string;
-  type: "PC" | "H5" | "both";
+  type: "pc" | "h5" | "both";
 }
 
 interface AppCardProps {
@@ -51,8 +51,8 @@ export function AppCard({ app, onClick, tintIndex = 0 }: AppCardProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-[#333] truncate">{app.name}</h3>
-            {app.type === "PC" && <Badge variant="pc">PC</Badge>}
-            {app.type === "H5" && <Badge variant="h5">H5</Badge>}
+            {app.type === "pc" && <Badge variant="pc">PC</Badge>}
+            {app.type === "h5" && <Badge variant="h5">H5</Badge>}
             {app.type === "both" && (
               <>
                 <Badge variant="pc">PC</Badge>

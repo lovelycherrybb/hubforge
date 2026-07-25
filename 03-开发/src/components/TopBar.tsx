@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SearchInput } from "./SearchInput";
 import { UserMenu } from "./UserMenu";
 
 interface TopBarProps {
   appName?: string;
-  onSearch?: (value: string) => void;
   user?: {
     email: string;
     name?: string;
@@ -17,7 +15,7 @@ interface TopBarProps {
   };
 }
 
-export function TopBar({ appName, onSearch, user }: TopBarProps) {
+export function TopBar({ appName, user }: TopBarProps) {
   const pathname = usePathname();
   const showAdmin = user?.isGlobalAdmin || user?.isTenantAdmin;
 
@@ -52,11 +50,6 @@ export function TopBar({ appName, onSearch, user }: TopBarProps) {
 
       {/* Spacer */}
       <div className="flex-1" />
-
-      {/* Search - hidden on mobile */}
-      <div className="hidden md:block w-64">
-        <SearchInput placeholder="找点什么？" onSearch={onSearch} />
-      </div>
 
       {/* Admin link - show for both global admin and tenant admin */}
       {showAdmin && (

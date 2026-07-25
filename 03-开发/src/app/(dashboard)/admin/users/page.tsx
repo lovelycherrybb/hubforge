@@ -115,7 +115,7 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell>{u.department?.name || "-"}</TableCell>
                   <TableCell>
-                    <Button size="sm" variant="ghost">
+                    <Button size="sm" variant="ghost" disabled title="编辑功能开发中">
                       改一下
                     </Button>
                   </TableCell>
@@ -130,12 +130,13 @@ export default function UsersPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         title="添加用户"
+        formId="create-user-form"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
               不了
             </Button>
-            <Button loading={creating} onClick={handleCreate}>
+            <Button type="submit" form="create-user-form" loading={creating}>
               添加
             </Button>
           </>
@@ -161,9 +162,12 @@ export default function UsersPage() {
             type="password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="至少8位"
+            placeholder="8位以上，含大小写字母和数字"
             required
           />
+          <p className="text-xs text-gray-400 mt-1">
+            密码要求：至少8位，包含大写字母、小写字母和数字
+          </p>
         </form>
       </Modal>
     </div>

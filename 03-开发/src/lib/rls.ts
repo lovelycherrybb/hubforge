@@ -13,9 +13,7 @@ import { db } from "./prisma";
  * @param tenantId - 当前租户 ID
  */
 export async function setTenantContext(tenantId: string): Promise<void> {
-  await db.$executeRawUnsafe(
-    `SET app.tenant_id = '${tenantId}'`
-  );
+  await db.$executeRawUnsafe('SET app.tenant_id = $1', tenantId);
 }
 
 /**
@@ -25,9 +23,7 @@ export async function setTenantContext(tenantId: string): Promise<void> {
  * @param isGlobalAdmin - 是否为全局管理员
  */
 export async function setAdminContext(isGlobalAdmin: boolean): Promise<void> {
-  await db.$executeRawUnsafe(
-    `SET app.is_global_admin = '${isGlobalAdmin}'`
-  );
+  await db.$executeRawUnsafe('SET app.is_global_admin = $1', String(isGlobalAdmin));
 }
 
 /**

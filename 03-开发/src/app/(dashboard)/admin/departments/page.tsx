@@ -107,7 +107,7 @@ export default function DepartmentsPage() {
   };
 
   return (
-    <div className="p-6">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-[#333]">组织架构</h1>
         <Button onClick={() => openCreateModal(null)}>+ 新增一级部门</Button>
@@ -219,12 +219,13 @@ export default function DepartmentsPage() {
         open={showCreate}
         onClose={() => setShowCreate(false)}
         title={createParentId ? "新增子部门" : "新增一级部门"}
+        formId="create-dept-form"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
               取消
             </Button>
-            <Button loading={creating} onClick={handleCreate}>
+            <Button type="submit" form="create-dept-form" loading={creating}>
               创建
             </Button>
           </>

@@ -20,7 +20,7 @@ interface App {
   name: string;
   slug: string;
   url: string;
-  type: "PC" | "H5" | "both";
+  type: "pc" | "h5" | "both";
   status: "active" | "inactive";
   permissions?: string[];
 }
@@ -33,7 +33,7 @@ export default function AppsPage() {
     name: "",
     slug: "",
     url: "",
-    type: "PC" as "PC" | "H5" | "both",
+    type: "pc" as "pc" | "h5" | "both",
     permissions: "",
   });
   const [creating, setCreating] = useState(false);
@@ -66,7 +66,7 @@ export default function AppsPage() {
           : [],
       });
       setShowCreate(false);
-      setForm({ name: "", slug: "", url: "", type: "PC", permissions: "" });
+      setForm({ name: "", slug: "", url: "", type: "pc", permissions: "" });
       fetchApps();
     } catch (err: unknown) {
       const apiErr = err as { error?: string };
@@ -131,8 +131,8 @@ export default function AppsPage() {
                     </code>
                   </TableCell>
                   <TableCell>
-                    {app.type === "PC" && <Badge variant="pc">PC</Badge>}
-                    {app.type === "H5" && <Badge variant="h5">H5</Badge>}
+                    {app.type === "pc" && <Badge variant="pc">PC</Badge>}
+                    {app.type === "h5" && <Badge variant="h5">H5</Badge>}
                     {app.type === "both" && (
                       <div className="flex gap-1">
                         <Badge variant="pc">PC</Badge>
@@ -169,12 +169,13 @@ export default function AppsPage() {
         onClose={() => setShowCreate(false)}
         title="注册新应用"
         size="lg"
+        formId="create-app-form"
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowCreate(false)}>
               不了
             </Button>
-            <Button loading={creating} onClick={handleCreate}>
+            <Button type="submit" form="create-app-form" loading={creating}>
               注册
             </Button>
           </>
@@ -210,12 +211,12 @@ export default function AppsPage() {
             <select
               value={form.type}
               onChange={(e) =>
-                setForm({ ...form, type: e.target.value as "PC" | "H5" | "both" })
+                setForm({ ...form, type: e.target.value as "pc" | "h5" | "both" })
               }
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-[#333] focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] focus:border-[#1a1a2e]"
             >
-              <option value="PC">PC</option>
-              <option value="H5">H5</option>
+              <option value="pc">PC</option>
+              <option value="h5">H5</option>
               <option value="both">PC + H5</option>
             </select>
           </div>

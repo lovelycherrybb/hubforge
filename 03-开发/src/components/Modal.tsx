@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useId, Children, cloneElement, isValidElement, type ReactNode, type ReactElement } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -10,6 +10,13 @@ interface ModalProps {
   children: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg";
+  /**
+   * When provided, Modal uses this id for the first <form> in children.
+   * Caller should add form={formId} to their submit button in footer
+   * so it submits the form even though the button renders outside it.
+   * If omitted, a unique id is auto-generated.
+   */
+  formId?: string;
 }
 
 const sizeStyles = {
@@ -18,8 +25,10 @@ const sizeStyles = {
   lg: "max-w-2xl",
 };
 
-export function Modal({ open, onClose, title, children, footer, size = "md" }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = "md", formId }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const autoId = useId();
+  const resolvedFormId = formId ?? autoId;
 
   useEffect(() => {
     if (!open) return;
@@ -35,6 +44,18 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
   }, [open, onClose]);
 
   if (!open) return null;
+
+  // Inject id into the first <form> child so footer buttons can reference it
+  let formInjected = false;
+  const enhancedChildren = Children.map(children, (child) => {
+    if (!formInjected && isValidElement(child) && (child as ReactElement).type === "form") {
+      formInjected = true;
+      return cloneElement(child as ReactElement<Record<string, unknown>>, {
+        id: resolvedFormId,
+      });
+    }
+    return child;
+  });
 
   return (
     <div
@@ -64,7 +85,7 @@ export function Modal({ open, onClose, title, children, footer, size = "md" }: M
             </button>
           </div>
         )}
-        <div className="px-5 py-4">{children}</div>
+        <div className="px-5 py-4">{enhancedChildren}</div>
         {footer && (
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-lg flex justify-end gap-2">
             {footer}
