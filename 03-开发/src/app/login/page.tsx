@@ -5,15 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
-import { Card, CardContent, CardHeader } from "@/components/Card";
 import { api } from "@/lib/api";
-
-const tips = [
-  "第一次来？注册一个账号就行。",
-  "密码忘了也没事，可以重置。",
-  "所有应用都在一个入口，不用记那么多网址。",
-  "有问题找管理员，或者先试试自己搞定。",
-];
 
 function LoginForm() {
   const router = useRouter();
@@ -73,11 +65,11 @@ function LoginForm() {
           href="/forgot-password"
           className="text-sm text-[#555] hover:text-[#1a1a2e]"
         >
-          忘记密码了？
+          忘记密码？
         </Link>
       </div>
       <Button type="submit" loading={loading} className="w-full">
-        进去
+        登录
       </Button>
     </form>
   );
@@ -102,23 +94,15 @@ function CurrentTime() {
 }
 
 export default function LoginPage() {
-  const [tip] = useState(() => tips[Math.floor(Math.random() * tips.length)]);
-
   return (
     <div className="min-h-screen bg-[#fafafa] flex">
       {/* Left side - brand area */}
       <div className="hidden lg:flex lg:w-2/5 bg-[#1a1a2e] flex-col justify-between p-10">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">H</span>
-            </span>
-            <span className="text-white font-bold text-lg tracking-tight">HubForge</span>
-          </div>
-          <p className="text-white/60 text-sm mt-8 max-w-xs leading-relaxed">
-            一个入口，所有应用。<br />
-            不用再记一堆网址了。
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
+            <span className="text-white text-sm font-bold">H</span>
+          </span>
+          <span className="text-white font-bold text-lg tracking-tight">HubForge</span>
         </div>
         <div className="text-white/30 text-xs">
           <CurrentTime />
@@ -138,8 +122,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-[#333] mb-1">回来啦</h1>
-          <p className="text-sm text-[#555] mb-8">用你的账号登录，然后开始干活。</p>
+          <h1 className="text-2xl font-bold text-[#333] mb-8">登录</h1>
 
           <Suspense
             fallback={
@@ -157,13 +140,8 @@ export default function LoginPage() {
               href="/register"
               className="text-[#1a1a2e] hover:underline font-medium"
             >
-              注册一个
+              注册
             </Link>
-          </p>
-
-          {/* Tip */}
-          <p className="mt-10 text-xs text-gray-400 text-center">
-            {tip}
           </p>
         </div>
       </div>

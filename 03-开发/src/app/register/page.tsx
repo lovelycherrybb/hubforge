@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
-import { Card, CardContent, CardHeader } from "@/components/Card";
 import { api } from "@/lib/api";
 
 function getPasswordStrength(password: string): { label: string; color: string; width: string } {
@@ -16,11 +15,11 @@ function getPasswordStrength(password: string): { label: string; color: string; 
   if (/[0-9]/.test(password)) score++;
   if (/[^A-Za-z0-9]/.test(password)) score++;
 
-  if (score <= 1) return { label: "太简单了", color: "bg-[#e94560]", width: "w-1/5" };
-  if (score <= 2) return { label: "还是有点弱", color: "bg-orange-500", width: "w-2/5" };
-  if (score <= 3) return { label: "还行吧", color: "bg-amber-500", width: "w-3/5" };
+  if (score <= 1) return { label: "太简单", color: "bg-[#e94560]", width: "w-1/5" };
+  if (score <= 2) return { label: "有点弱", color: "bg-orange-500", width: "w-2/5" };
+  if (score <= 3) return { label: "还行", color: "bg-amber-500", width: "w-3/5" };
   if (score <= 4) return { label: "不错", color: "bg-green-500", width: "w-4/5" };
-  return { label: "很好，记得住就行", color: "bg-green-600", width: "w-full" };
+  return { label: "很好", color: "bg-green-600", width: "w-full" };
 }
 
 export default function RegisterPage() {
@@ -40,7 +39,7 @@ export default function RegisterPage() {
     setError("");
 
     if (!passwordsMatch) {
-      setError("两次密码不一样，检查一下");
+      setError("两次密码不一样");
       return;
     }
 
@@ -60,21 +59,13 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-[#fafafa] flex">
       {/* Left side - brand area */}
       <div className="hidden lg:flex lg:w-2/5 bg-[#1a1a2e] flex-col justify-between p-10">
-        <div>
-          <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">H</span>
-            </span>
-            <span className="text-white font-bold text-lg tracking-tight">HubForge</span>
-          </div>
-          <p className="text-white/60 text-sm mt-8 max-w-xs leading-relaxed">
-            注册一个账号，就能访问所有应用。<br />
-            不用到处找网址了。
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
+            <span className="text-white text-sm font-bold">H</span>
+          </span>
+          <span className="text-white font-bold text-lg tracking-tight">HubForge</span>
         </div>
-        <div className="text-white/30 text-xs">
-          HubForge
-        </div>
+        <div />
       </div>
 
       {/* Right side - register form */}
@@ -90,8 +81,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-[#333] mb-1">创建账号</h1>
-          <p className="text-sm text-[#555] mb-8">填几个信息就行，很快的。</p>
+          <h1 className="text-2xl font-bold text-[#333] mb-8">注册</h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -114,7 +104,7 @@ export default function RegisterPage() {
                 id="password"
                 label="密码"
                 type="password"
-                placeholder="至少8位，越复杂越好"
+                placeholder="至少8位"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -135,9 +125,8 @@ export default function RegisterPage() {
             </div>
             <Input
               id="confirmPassword"
-              label="再输一次密码"
+              label="确认密码"
               type="password"
-              placeholder="确认一下"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -154,12 +143,12 @@ export default function RegisterPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-[#555]">
-            已经有账号了？{" "}
+            已经有账号？{" "}
             <Link
               href="/login"
               className="text-[#1a1a2e] hover:underline font-medium"
             >
-              去登录
+              登录
             </Link>
           </p>
         </div>
