@@ -194,7 +194,7 @@ export default function TenantsPage() {
                   <TableCell>{t._count?.tenantApps ?? 0}</TableCell>
                   <TableCell>
                     <Button size="sm" variant="ghost" onClick={() => openTenant(t)}>
-                      管理 →
+                      管理
                     </Button>
                   </TableCell>
                 </TableRow>
