@@ -30,7 +30,7 @@ export function TopBar({ appName, user }: TopBarProps) {
       </Link>
 
       {/* Nav */}
-      <nav className="flex items-center gap-1 ml-3">
+      <nav className="hidden lg:flex items-center gap-1 ml-3">
         <Link
           href="/"
           className={`px-3 py-1 rounded-md text-sm transition-colors ${
@@ -55,7 +55,7 @@ export function TopBar({ appName, user }: TopBarProps) {
       {showAdmin && (
         <Link
           href="/admin/users"
-          className={`p-1.5 rounded-md transition-colors ${
+          className={`hidden lg:inline-flex p-1.5 rounded-md transition-colors ${
             pathname.startsWith("/admin")
               ? "bg-[#1a1a2e]/5 text-[#1a1a2e]"
               : "text-gray-400 hover:bg-gray-100 hover:text-[#333]"

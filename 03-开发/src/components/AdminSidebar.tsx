@@ -16,7 +16,7 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 bg-white border-r border-gray-200 shrink-0 overflow-y-auto">
+    <aside className="hidden lg:block w-56 bg-white border-r border-gray-200 shrink-0 overflow-y-auto">
       <div className="px-4 py-3 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-[#333]">后台管理</h2>
       </div>
