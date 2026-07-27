@@ -21,6 +21,7 @@ interface Tenant {
   status: string;
   quotaUsers: number;
   quotaApps: number;
+  quotaOrgLevels: number;
   _count?: { users: number; tenantApps: number };
 }
 
@@ -40,6 +41,15 @@ interface TenantApp {
   app: App;
 }
 
+interface TenantUser {
+  id: string;
+  email: string;
+  name: string;
+  status: string;
+  isGlobalAdmin: boolean;
+  department?: { id: string; name: string } | null;
+}
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +57,7 @@ export default function TenantsPage() {
 
   // 租户操作面板
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
-  const [activeTab, setActiveTab] = useState<"info" | "apps" | "danger">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "users" | "apps" | "danger">("info");
 
   // 应用配置
   const [allApps, setAllApps] = useState<App[]>([]);
@@ -55,6 +65,17 @@ export default function TenantsPage() {
   const [appSearch, setAppSearch] = useState("");
   const [appFilter, setAppFilter] = useState<"all" | "assigned" | "unassigned">("all");
   const [configLoading, setConfigLoading] = useState(false);
+
+  // 用户管理
+  const [tenantUsers, setTenantUsers] = useState<TenantUser[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUser, setNewUser] = useState({ email: "", name: "", password: "" });
+  const [addingUser, setAddingUser] = useState(false);
+
+  // 配额编辑
+  const [editingQuota, setEditingQuota] = useState(false);
+  const [quotaForm, setQuotaForm] = useState({ quotaUsers: 100, quotaApps: 50, quotaOrgLevels: 5 });
 
   const fetchTenants = async () => {
     try {
@@ -73,9 +94,12 @@ export default function TenantsPage() {
   const openTenant = async (tenant: Tenant) => {
     setActiveTenant(tenant);
     setActiveTab("info");
+    setEditingQuota(false);
+    setQuotaForm({ quotaUsers: tenant.quotaUsers, quotaApps: tenant.quotaApps, quotaOrgLevels: tenant.quotaOrgLevels });
     setAppSearch("");
     setAppFilter("all");
-    await loadApps(tenant.id);
+    setShowAddUser(false);
+    await Promise.all([loadApps(tenant.id), loadUsers(tenant.id)]);
   };
 
   const loadApps = async (tenantId: string) => {
@@ -94,7 +118,65 @@ export default function TenantsPage() {
     }
   };
 
-  // 分配/取消/切换
+  const loadUsers = async (tenantId: string) => {
+    setUsersLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; data: TenantUser[] }>(`/api/tenants/${tenantId}/users`);
+      setTenantUsers(res.data || []);
+    } catch {
+      setError("加载用户数据失败");
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  // 保存配额
+  const saveQuota = async () => {
+    if (!activeTenant) return;
+    try {
+      await api.put(`/api/tenants/${activeTenant.id}`, quotaForm);
+      const updated = { ...activeTenant, ...quotaForm };
+      setActiveTenant(updated);
+      setEditingQuota(false);
+      fetchTenants();
+    } catch {
+      setError("保存配额失败");
+    }
+  };
+
+  // 添加用户
+  const handleAddUser = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!activeTenant) return;
+    setAddingUser(true);
+    try {
+      await api.post(`/api/tenants/${activeTenant.id}/users`, newUser);
+      setShowAddUser(false);
+      setNewUser({ email: "", name: "", password: "" });
+      loadUsers(activeTenant.id);
+      fetchTenants();
+    } catch (err: unknown) {
+      const apiErr = err as { error?: string };
+      setError(apiErr.error || "添加用户失败");
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  // 设置/取消租户管理员
+  const toggleAdmin = async (user: TenantUser) => {
+    if (!activeTenant) return;
+    try {
+      await api.put(`/api/tenants/${activeTenant.id}/users/${user.id}`, {
+        isGlobalAdmin: !user.isGlobalAdmin,
+      });
+      loadUsers(activeTenant.id);
+    } catch {
+      setError("操作失败");
+    }
+  };
+
+  // 应用分配/取消
   const assignApp = async (appId: string) => {
     if (!activeTenant) return;
     await api.post(`/api/tenants/${activeTenant.id}/apps`, { appId, enabled: true });
@@ -118,7 +200,7 @@ export default function TenantsPage() {
     await loadApps(activeTenant.id);
   };
 
-  // 停用/启用租户
+  // 租户停用/启用
   const toggleTenantStatus = async () => {
     if (!activeTenant) return;
     const newStatus = activeTenant.status === "active" ? "suspended" : "active";
@@ -127,17 +209,13 @@ export default function TenantsPage() {
     setActiveTenant({ ...activeTenant, status: newStatus });
   };
 
-  // 应用筛选逻辑
+  // 应用筛选
   const assignedAppIds = new Set(tenantApps.map((ta) => ta.appId));
   const filteredApps = allApps.filter((app) => {
-    // 搜索
     if (appSearch) {
       const q = appSearch.toLowerCase();
-      if (!app.name.toLowerCase().includes(q) && !app.slug.toLowerCase().includes(q)) {
-        return false;
-      }
+      if (!app.name.toLowerCase().includes(q) && !app.slug.toLowerCase().includes(q)) return false;
     }
-    // 筛选
     if (appFilter === "assigned") return assignedAppIds.has(app.id);
     if (appFilter === "unassigned") return !assignedAppIds.has(app.id);
     return true;
@@ -204,13 +282,11 @@ export default function TenantsPage() {
         </div>
       )}
 
-      {/* ===== 租户操作面板（全屏大框） ===== */}
+      {/* ===== 租户操作面板 ===== */}
       {activeTenant && (
         <div className="fixed inset-0 z-50 flex">
-          {/* 遮罩 */}
           <div className="absolute inset-0 bg-black/40" onClick={() => setActiveTenant(null)} />
-          {/* 面板 */}
-          <div className="relative ml-auto w-full max-w-2xl bg-white shadow-2xl flex flex-col animate-slide-in">
+          <div className="relative ml-auto w-full max-w-2xl bg-white shadow-2xl flex flex-col">
             {/* 顶栏 */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div>
@@ -227,48 +303,40 @@ export default function TenantsPage() {
               </button>
             </div>
 
-            {/* Tab 导航 */}
+            {/* Tab */}
             <div className="flex border-b border-gray-200 px-6">
-              <button
-                onClick={() => setActiveTab("info")}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "info"
-                    ? "border-[#1a1a2e] text-[#1a1a2e]"
-                    : "border-transparent text-gray-500 hover:text-[#333]"
-                }`}
-              >
-                基本信息
-              </button>
-              <button
-                onClick={() => setActiveTab("apps")}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "apps"
-                    ? "border-[#1a1a2e] text-[#1a1a2e]"
-                    : "border-transparent text-gray-500 hover:text-[#333]"
-                }`}
-              >
-                应用配置
-                <span className="ml-1.5 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                  {assignedCount}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab("danger")}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "danger"
-                    ? "border-[#e94560] text-[#e94560]"
-                    : "border-transparent text-gray-500 hover:text-[#333]"
-                }`}
-              >
-                危险操作
-              </button>
+              {(["info", "users", "apps", "danger"] as const).map((tab) => {
+                const labels = { info: "基本信息", users: "用户管理", apps: "应用配置", danger: "危险操作" };
+                const counts = { info: "", users: `${tenantUsers.length}`, apps: `${assignedCount}`, danger: "" };
+                const isDanger = tab === "danger";
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === tab
+                        ? isDanger ? "border-[#e94560] text-[#e94560]" : "border-[#1a1a2e] text-[#1a1a2e]"
+                        : "border-transparent text-gray-500 hover:text-[#333]"
+                    }`}
+                  >
+                    {labels[tab]}
+                    {counts[tab] && (
+                      <span className="ml-1 text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                        {counts[tab]}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab 内容 */}
             <div className="flex-1 overflow-y-auto p-6">
-              {/* 基本信息 */}
+
+              {/* ===== 基本信息 ===== */}
               {activeTab === "info" && (
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* 统计卡片 */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <div className="text-2xl font-bold text-[#1a1a2e]">{activeTenant._count?.users ?? 0}</div>
@@ -279,6 +347,8 @@ export default function TenantsPage() {
                       <div className="text-sm text-gray-500">已分配应用</div>
                     </div>
                   </div>
+
+                  {/* 基本信息 */}
                   <div className="space-y-3">
                     <div className="flex justify-between py-2 border-b border-gray-100">
                       <span className="text-sm text-gray-500">租户标识</span>
@@ -290,22 +360,155 @@ export default function TenantsPage() {
                         {activeTenant.status === "active" ? "正常" : "已停用"}
                       </Badge>
                     </div>
-                    <div className="flex justify-between py-2 border-b border-gray-100">
-                      <span className="text-sm text-gray-500">用户配额</span>
-                      <span className="text-sm">{activeTenant.quotaUsers}</span>
+                  </div>
+
+                  {/* 配额 */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-medium text-[#333]">配额设置</h3>
+                      {!editingQuota && (
+                        <Button size="sm" variant="ghost" onClick={() => setEditingQuota(true)}>
+                          编辑
+                        </Button>
+                      )}
                     </div>
-                    <div className="flex justify-between py-2 border-b border-gray-100">
-                      <span className="text-sm text-gray-500">应用配额</span>
-                      <span className="text-sm">{activeTenant.quotaApps}</span>
-                    </div>
+
+                    {editingQuota ? (
+                      <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
+                        <Input
+                          label="用户上限"
+                          type="number"
+                          value={String(quotaForm.quotaUsers)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaUsers: Number(e.target.value) })}
+                        />
+                        <Input
+                          label="应用上限"
+                          type="number"
+                          value={String(quotaForm.quotaApps)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaApps: Number(e.target.value) })}
+                        />
+                        <Input
+                          label="组织层级上限"
+                          type="number"
+                          value={String(quotaForm.quotaOrgLevels)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaOrgLevels: Number(e.target.value) })}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveQuota}>保存</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setEditingQuota(false)}>取消</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between py-2 border-b border-gray-100">
+                          <span className="text-sm text-gray-500">用户上限</span>
+                          <span className="text-sm">{activeTenant.quotaUsers}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-gray-100">
+                          <span className="text-sm text-gray-500">应用上限</span>
+                          <span className="text-sm">{activeTenant.quotaApps}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-gray-100">
+                          <span className="text-sm text-gray-500">组织层级上限</span>
+                          <span className="text-sm">{activeTenant.quotaOrgLevels}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* 应用配置 */}
+              {/* ===== 用户管理 ===== */}
+              {activeTab === "users" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-[#333]">租户用户</h3>
+                    <Button size="sm" onClick={() => setShowAddUser(true)}>+ 添加用户</Button>
+                  </div>
+
+                  {usersLoading ? (
+                    <div className="flex justify-center py-8">
+                      <div className="animate-spin w-6 h-6 border-4 border-[#1a1a2e] border-t-transparent rounded-full" />
+                    </div>
+                  ) : tenantUsers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <p className="text-sm">还没有用户</p>
+                      <p className="text-xs mt-1">点击上方按钮添加第一个用户</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {tenantUsers.map((user) => (
+                        <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{user.name || user.email}</span>
+                              {user.isGlobalAdmin && (
+                                <Badge variant="info">管理员</Badge>
+                              )}
+                              <Badge variant={user.status === "active" ? "success" : "danger"}>
+                                {user.status === "active" ? "正常" : user.status === "invited" ? "待激活" : "已锁定"}
+                              </Badge>
+                            </div>
+                            {user.name && (
+                              <p className="text-xs text-gray-400 mt-0.5">{user.email}</p>
+                            )}
+                            {user.department && (
+                              <p className="text-xs text-gray-400">部门：{user.department.name}</p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={user.isGlobalAdmin ? "danger" : "ghost"}
+                            onClick={() => toggleAdmin(user)}
+                          >
+                            {user.isGlobalAdmin ? "取消管理员" : "设为管理员"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 添加用户表单 */}
+                  {showAddUser && (
+                    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                      <h4 className="text-sm font-medium text-[#333] mb-3">添加新用户</h4>
+                      <form onSubmit={handleAddUser} className="space-y-3">
+                        <Input
+                          label="邮箱"
+                          type="email"
+                          value={newUser.email}
+                          onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                          placeholder="user@company.com"
+                          required
+                        />
+                        <Input
+                          label="姓名"
+                          value={newUser.name}
+                          onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                          placeholder="张三"
+                          required
+                        />
+                        <Input
+                          label="初始密码"
+                          type="password"
+                          value={newUser.password}
+                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                          placeholder="至少8位，含大小写和数字"
+                          required
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" loading={addingUser} type="submit">添加</Button>
+                          <Button size="sm" variant="secondary" onClick={() => setShowAddUser(false)}>取消</Button>
+                        </div>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ===== 应用配置 ===== */}
               {activeTab === "apps" && (
                 <div className="space-y-4">
-                  {/* 搜索和筛选 */}
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <Input
@@ -345,23 +548,21 @@ export default function TenantsPage() {
                               isAssigned ? "bg-[#1a1a2e]/5 border-[#1a1a2e]/20" : "bg-white border-gray-200"
                             }`}
                           >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium truncate">{app.name}</span>
-                                  <Badge variant={app.type === "h5" ? "warning" : "default"}>
-                                    {app.type.toUpperCase()}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium truncate">{app.name}</span>
+                                <Badge variant={app.type === "h5" ? "warning" : "default"}>
+                                  {app.type.toUpperCase()}
+                                </Badge>
+                                {isAssigned && tenantApp && (
+                                  <Badge variant={tenantApp.enabled ? "success" : "danger"}>
+                                    {tenantApp.enabled ? "启用" : "停用"}
                                   </Badge>
-                                  {isAssigned && tenantApp && (
-                                    <Badge variant={tenantApp.enabled ? "success" : "danger"}>
-                                      {tenantApp.enabled ? "启用" : "停用"}
-                                    </Badge>
-                                  )}
-                                </div>
-                                {app.description && (
-                                  <p className="text-xs text-gray-400 truncate mt-0.5">{app.description}</p>
                                 )}
                               </div>
+                              {app.description && (
+                                <p className="text-xs text-gray-400 truncate mt-0.5">{app.description}</p>
+                              )}
                             </div>
                             <div className="flex gap-2 shrink-0 ml-3">
                               {isAssigned ? (
@@ -374,9 +575,7 @@ export default function TenantsPage() {
                                   </Button>
                                 </>
                               ) : (
-                                <Button size="sm" onClick={() => assignApp(app.id)}>
-                                  分配
-                                </Button>
+                                <Button size="sm" onClick={() => assignApp(app.id)}>分配</Button>
                               )}
                             </div>
                           </div>
@@ -387,7 +586,7 @@ export default function TenantsPage() {
                 </div>
               )}
 
-              {/* 危险操作 */}
+              {/* ===== 危险操作 ===== */}
               {activeTab === "danger" && (
                 <div className="space-y-4">
                   <div className="p-4 border border-orange-200 bg-orange-50 rounded-lg">
@@ -408,16 +607,6 @@ export default function TenantsPage() {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        @keyframes slide-in {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        .animate-slide-in {
-          animation: slide-in 0.2s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

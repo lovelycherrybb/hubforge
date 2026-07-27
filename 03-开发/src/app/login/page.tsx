@@ -98,17 +98,21 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#fafafa] flex">
       {/* Left side - brand area */}
-      <div className="hidden lg:flex lg:w-2/5 bg-[#1a1a2e] flex-col justify-between p-10">
-        <div className="flex items-center gap-3">
+      <div className="hidden lg:flex lg:w-2/5 relative flex-col justify-between p-10">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url('/login-bg.jpg')" }}
+        />
+        <div className="absolute inset-0 bg-[#1a1a2e]/60" />
+        <div className="relative z-10 flex items-center gap-3">
           <img src="/logo.png" alt="华检科" className="w-9 h-9 rounded object-cover" />
           <div className="flex flex-col">
             <span className="text-white font-bold text-lg tracking-tight">华检科 HubForge</span>
             <span className="text-white/50 text-xs">AI 重塑咨询解决方案</span>
           </div>
         </div>
-        <div>
-          <p className="text-white/40 text-sm mt-6">AI 重塑咨询解决方案</p>
-          <div className="text-white/20 text-xs mt-4">
+        <div className="relative z-10">
+          <div className="text-white/20 text-xs">
             <CurrentTime />
           </div>
         </div>
