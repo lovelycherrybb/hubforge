@@ -55,6 +55,11 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname.startsWith("/public") ||
+    pathname.startsWith("/logo") ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".svg") ||
+    pathname.endsWith(".ico") ||
     isPublicPath(pathname)
   ) {
     return NextResponse.next();

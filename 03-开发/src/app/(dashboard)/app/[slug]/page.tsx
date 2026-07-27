@@ -121,7 +121,7 @@ export default function AppViewPage() {
 
         {/* Logo + 应用名 */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <img src="/logo.jpg" alt="华检科" className="w-5 h-5 rounded object-cover shrink-0" />
+          <img src="/logo.png" alt="华检科" className="w-5 h-5 rounded object-cover shrink-0" />
           <span className="text-sm font-semibold text-[#333] truncate">{app.name}</span>
         </div>
 

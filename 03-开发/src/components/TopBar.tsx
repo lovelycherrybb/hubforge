@@ -23,7 +23,7 @@ export function TopBar({ appName, user }: TopBarProps) {
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2 shrink-0 group">
-        <img src="/logo.jpg" alt="华检科" className="w-7 h-7 rounded object-cover" />
+        <img src="/logo.png" alt="华检科" className="w-7 h-7 rounded object-cover" />
         <div className="hidden sm:flex flex-col leading-tight">
           <span className="text-sm font-bold text-[#1a1a2e] tracking-tight">华检科</span>
           <span className="text-[10px] text-gray-400 -mt-0.5">HubForge</span>
