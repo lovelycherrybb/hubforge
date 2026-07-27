@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { users: true, apps: true } } },
+      include: { _count: { select: { users: true, tenantApps: true } } },
     }),
     db.tenant.count({ where: { status: { not: "deleted" } } }),
   ]);

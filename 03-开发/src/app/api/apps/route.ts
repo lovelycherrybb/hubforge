@@ -1,7 +1,5 @@
-// ============================================================
-// GET  /api/apps — 应用列表
-// POST /api/apps — 注册应用
-// 权限要求：租户管理员
+// GET  /api/apps — 应用列表（当前租户已分配的应用）
+// POST /api/apps — 注册应用（仅主租户）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -10,7 +8,6 @@ import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { parseBody, parseQuery, paginationSchema } from "@/lib/validate";
 import { success, created, error, forbidden, unauthorized, paginated } from "@/lib/api-response";
-import { withTenantContext } from "@/lib/rls";
 
 const createAppSchema = z.object({
   name: z.string().min(1, "应用名称不能为空").max(100),
@@ -32,13 +29,7 @@ const listQuerySchema = paginationSchema.extend({
   status: z.string().optional(),
 });
 
-async function requireTenantAdmin(request: NextRequest) {
-  const payload = await getAuthUser(request);
-  if (!payload) return { error: unauthorized() };
-  if (!payload.isGlobalAdmin) return { error: forbidden("仅限管理员") };
-  return { payload };
-}
-
+// GET — 获取当前租户已分配的应用列表
 export async function GET(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
@@ -47,83 +38,86 @@ export async function GET(request: NextRequest) {
   if (!parsed.success) return error(parsed.error);
   const { page, pageSize, search, type, status } = parsed.data;
 
-  return withTenantContext(
-    payload.tenantId,
-    payload.isGlobalAdmin,
-    async () => {
-      const where = {
-        tenantId: payload.tenantId,
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: "insensitive" as const } },
-            { description: { contains: search, mode: "insensitive" as const } },
-          ],
-        }),
-        ...(type && { type }),
-        ...(status && { status }),
-      };
+  // 主租户看所有应用，普通租户只看已分配的应用
+  if (payload.isGlobalAdmin) {
+    const where = {
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { description: { contains: search, mode: "insensitive" as const } },
+        ],
+      }),
+      ...(type && { type }),
+      ...(status && { status }),
+    };
 
-      const [apps, total] = await Promise.all([
-        db.app.findMany({
-          where,
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-        }),
-        db.app.count({ where }),
-      ]);
+    const [apps, total] = await Promise.all([
+      db.app.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      }),
+      db.app.count({ where }),
+    ]);
 
-      return paginated(apps, total, page, pageSize);
-    }
-  );
+    return paginated(apps, total, page, pageSize);
+  }
+
+  // 普通租户：只返回已分配且启用的应用
+  const where = {
+    tenantId: payload.tenantId,
+    enabled: true,
+    app: {
+      status: "active",
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: "insensitive" as const } },
+          { description: { contains: search, mode: "insensitive" as const } },
+        ],
+      }),
+      ...(type && { type }),
+    },
+  };
+
+  const [tenantApps, total] = await Promise.all([
+    db.tenantApp.findMany({
+      where,
+      include: { app: true },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: { app: { sortOrder: "asc" } },
+    }),
+    db.tenantApp.count({ where }),
+  ]);
+
+  const apps = tenantApps.map((ta) => ta.app);
+  return paginated(apps, total, page, pageSize);
 }
 
+// POST — 注册新应用（仅主租户）
 export async function POST(request: NextRequest) {
-  const auth = await requireTenantAdmin(request);
-  if (auth.error) return auth.error;
+  const payload = await getAuthUser(request);
+  if (!payload) return unauthorized();
+  if (!payload.isGlobalAdmin) return forbidden("仅限主租户创建应用");
 
   const parsed = await parseBody(request, createAppSchema);
   if (!parsed.success) return error(parsed.error);
 
-  return withTenantContext(
-    auth.payload.tenantId,
-    auth.payload.isGlobalAdmin,
-    async () => {
-      const { name, slug, type, description, icon, url, sortOrder } = parsed.data;
+  const { name, slug, type, description, icon, url, sortOrder } = parsed.data;
 
-      // 检查 slug 唯一性（租户内）
-      const existing = await db.app.findFirst({
-        where: { slug, tenantId: auth.payload.tenantId },
-      });
-      if (existing) return error("该应用标识在当前租户中已存在");
+  // 检查 slug 全局唯一
+  const existing = await db.app.findFirst({ where: { slug } });
+  if (existing) return error("该应用标识已存在");
 
-      // 检查配额
-      const tenant = await db.tenant.findUnique({
-        where: { id: auth.payload.tenantId },
-      });
-      if (!tenant) return error("租户不存在");
+  const app = await db.app.create({
+    data: { name, slug, type, description, icon, url, sortOrder },
+  });
 
-      const appCount = await db.app.count({
-        where: { tenantId: auth.payload.tenantId },
-      });
-      if (appCount >= tenant.quotaApps) {
-        return error(`已达到应用数量上限 (${tenant.quotaApps})`);
-      }
+  // 自动分配给主租户
+  await db.tenantApp.create({
+    data: { tenantId: payload.tenantId, appId: app.id, enabled: true },
+  });
 
-      const app = await db.app.create({
-        data: {
-          name,
-          slug,
-          type,
-          description,
-          icon,
-          url,
-          sortOrder,
-          tenantId: auth.payload.tenantId,
-        },
-      });
-
-      return created(app);
-    }
-  );
+  return created(app);
 }

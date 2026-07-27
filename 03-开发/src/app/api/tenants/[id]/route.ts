@@ -36,7 +36,7 @@ export async function GET(
   const tenant = await db.tenant.findUnique({
     where: { id: params.id },
     include: {
-      _count: { select: { users: true, apps: true, departments: true } },
+      _count: { select: { users: true, tenantApps: true, departments: true } },
       configs: true,
     },
   });
