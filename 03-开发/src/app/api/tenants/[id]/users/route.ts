@@ -5,7 +5,7 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { hashSync } from "bcryptjs";
+import { hash } from "bcryptjs";
 import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
@@ -79,11 +79,13 @@ export async function POST(
   });
   if (existing) return error("该邮箱在当前租户中已存在");
 
+  const passwordHash = await hash(password, 12);
+
   const user = await db.user.create({
     data: {
       email,
       name,
-      passwordHash: hashSync(password, 10),
+      passwordHash,
       tenantId: params.id,
       status: "active",
     },

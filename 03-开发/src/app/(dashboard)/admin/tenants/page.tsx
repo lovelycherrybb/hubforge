@@ -73,6 +73,12 @@ export default function TenantsPage() {
   const [newUser, setNewUser] = useState({ email: "", name: "", password: "" });
   const [addingUser, setAddingUser] = useState(false);
 
+  // 密码重置
+  const [resetUser, setResetUser] = useState<TenantUser | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+
   // 配额编辑
   const [editingQuota, setEditingQuota] = useState(false);
   const [quotaForm, setQuotaForm] = useState({ quotaUsers: 100, quotaApps: 50, quotaOrgLevels: 5 });
@@ -173,6 +179,30 @@ export default function TenantsPage() {
       loadUsers(activeTenant.id);
     } catch {
       setError("操作失败");
+    }
+  };
+
+  // 打开密码重置弹窗
+  const openResetPassword = (user: TenantUser) => {
+    setResetUser(user);
+    setResetPassword("");
+    setResetSuccess(false);
+  };
+
+  // 执行密码重置
+  const handleResetPassword = async () => {
+    if (!activeTenant || !resetUser) return;
+    setResetting(true);
+    try {
+      const body: { password?: string } = {};
+      if (resetPassword) body.password = resetPassword;
+      await api.post(`/api/tenants/${activeTenant.id}/users/${resetUser.id}/reset-password`, body);
+      setResetSuccess(true);
+    } catch (err: unknown) {
+      const apiErr = err as { error?: string };
+      setError(apiErr.error || "重置失败");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -456,13 +486,22 @@ export default function TenantsPage() {
                               <p className="text-xs text-gray-400">部门：{user.department.name}</p>
                             )}
                           </div>
-                          <Button
-                            size="sm"
-                            variant={user.isGlobalAdmin ? "danger" : "ghost"}
-                            onClick={() => toggleAdmin(user)}
-                          >
-                            {user.isGlobalAdmin ? "取消管理员" : "设为管理员"}
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openResetPassword(user)}
+                            >
+                              重置密码
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={user.isGlobalAdmin ? "danger" : "ghost"}
+                              onClick={() => toggleAdmin(user)}
+                            >
+                              {user.isGlobalAdmin ? "取消管理员" : "设为管理员"}
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -604,6 +643,58 @@ export default function TenantsPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {/* ===== 密码重置弹窗 ===== */}
+      {resetUser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setResetUser(null)} />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            {resetSuccess ? (
+              <div className="text-center">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-[#333] mb-2">密码已重置</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  {resetUser.name || resetUser.email} 的密码已重置为：
+                </p>
+                <div className="p-3 bg-gray-100 rounded-lg font-mono text-lg text-center mb-4">
+                  {resetPassword || "1234Aa78"}
+                </div>
+                <Button onClick={() => setResetUser(null)}>完成</Button>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-lg font-bold text-[#333] mb-1">重置密码</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  为 <span className="font-medium">{resetUser.name || resetUser.email}</span> 重置密码
+                </p>
+                <div className="space-y-4">
+                  <Input
+                    label="新密码（留空则使用默认密码）"
+                    type="text"
+                    value={resetPassword}
+                    onChange={(e) => setResetPassword(e.target.value)}
+                    placeholder="默认：1234Aa78"
+                  />
+                  <p className="text-xs text-gray-400">
+                    默认密码：1234Aa78（8位，含大小写和数字）
+                  </p>
+                  <div className="flex gap-2">
+                    <Button loading={resetting} onClick={handleResetPassword}>
+                      确认重置
+                    </Button>
+                    <Button variant="secondary" onClick={() => setResetUser(null)}>
+                      取消
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
