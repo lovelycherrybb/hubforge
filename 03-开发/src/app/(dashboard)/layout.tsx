@@ -37,37 +37,44 @@ export default function DashboardLayout({
     );
   }
 
-  // Determine current app name from path
-  const appMatch = pathname.match(/^\/app\/([^/]+)/);
-  const appName = appMatch ? decodeURIComponent(appMatch[1]) : undefined;
-
-  // Check if user is tenant admin (has tenant.admin permission or is global admin)
+  const isInApp = pathname.startsWith("/app/");
   const isTenantAdmin = user.isGlobalAdmin || user.permissions?.some(
     (p: { key?: string }) => p?.key === "tenant.admin"
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <TopBar
-        appName={appName}
-        user={{
-          email: user.email,
-          name: user.name,
-          isGlobalAdmin: user.isGlobalAdmin,
-          isTenantAdmin,
-          tenant: user.tenant,
-        }}
-      />
-      <main className="h-[calc(100vh-48px)] lg:h-[calc(100vh-48px)] pb-14 lg:pb-0">
+      {/* PC 端始终显示 TopBar；H5 端在应用内隐藏 TopBar（应用视图有自己的顶部栏） */}
+      <div className={isInApp ? "hidden lg:block" : ""}>
+        <TopBar
+          user={{
+            email: user.email,
+            name: user.name,
+            isGlobalAdmin: user.isGlobalAdmin,
+            isTenantAdmin,
+            tenant: user.tenant,
+          }}
+        />
+      </div>
+
+      {/* 内容区 */}
+      <main
+        className={isInApp
+          ? "h-screen lg:h-[calc(100vh-48px)]"  // 应用内：H5 全屏，PC 减去 TopBar
+          : "h-[calc(100vh-48px)] pb-14 lg:pb-0"  // 非应用：H5 减去底栏
+        }
+      >
         {children}
       </main>
 
-      {/* H5 底部导航栏 */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 flex items-center justify-around h-14 lg:hidden">
-        <BottomNavItem href="/" icon="home" label="首页" active={pathname === "/"} />
-        <BottomNavItem href="/" icon="apps" label="应用" active={pathname === "/"} />
-        <BottomNavItem href="/admin/users" icon="user" label="我的" active={pathname.startsWith("/admin")} />
-      </nav>
+      {/* H5 底部导航栏 - 应用内隐藏 */}
+      {!isInApp && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 flex items-center justify-around h-14 lg:hidden">
+          <BottomNavItem href="/" icon="home" label="首页" active={pathname === "/"} />
+          <BottomNavItem href="/" icon="apps" label="应用" active={false} />
+          <BottomNavItem href="/admin/users" icon="user" label="我的" active={pathname.startsWith("/admin")} />
+        </nav>
+      )}
     </div>
   );
 }

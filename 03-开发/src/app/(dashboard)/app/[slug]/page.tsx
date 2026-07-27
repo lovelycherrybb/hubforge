@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 interface AppInfo {
@@ -14,11 +15,20 @@ interface AppInfo {
 
 export default function AppViewPage() {
   const params = useParams();
+  const router = useRouter();
   const slug = params.slug as string;
   const [app, setApp] = useState<AppInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const entryRef = useRef<string>("/");
+
+  // 记录进入应用前的页面（用于 × 关闭按钮）
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      entryRef.current = document.referrer || "/";
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchApp() {
@@ -53,6 +63,15 @@ export default function AppViewPage() {
     };
   }, []);
 
+  const handleBack = () => {
+    router.back();
+  };
+
+  const handleClose = () => {
+    // 关闭应用，退出到进入前的页面
+    router.push("/");
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -78,17 +97,56 @@ export default function AppViewPage() {
           />
         </svg>
         <p className="text-lg font-medium text-[#555]">{error || "应用不存在"}</p>
+        <Link href="/" className="mt-4 text-sm text-[#1a1a2e] hover:underline">
+          回到首页
+        </Link>
       </div>
     );
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      src={app.url}
-      className="w-full h-full border-0"
-      sandbox="allow-scripts allow-forms"
-      title={app.name}
-    />
+    <div className="flex flex-col h-full">
+      {/* H5 顶部栏 - 仅移动端显示 */}
+      <div className="lg:hidden flex items-center h-12 px-3 bg-white border-b border-gray-200 shrink-0">
+        {/* ‹ 返回上一步 */}
+        <button
+          onClick={handleBack}
+          className="w-10 h-10 flex items-center justify-center text-[#333] hover:text-[#1a1a2e] transition-colors"
+          aria-label="返回"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        {/* Logo + 应用名 */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="w-5 h-5 rounded bg-[#1a1a2e] flex items-center justify-center shrink-0">
+            <span className="text-white text-[9px] font-bold">H</span>
+          </span>
+          <span className="text-sm font-semibold text-[#333] truncate">{app.name}</span>
+        </div>
+
+        {/* × 关闭应用 */}
+        <button
+          onClick={handleClose}
+          className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-[#e94560] transition-colors"
+          aria-label="关闭应用"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      {/* iframe 应用内容区 */}
+      <iframe
+        ref={iframeRef}
+        src={app.url}
+        className="flex-1 w-full border-0"
+        sandbox="allow-scripts allow-forms"
+        title={app.name}
+      />
+    </div>
   );
 }
