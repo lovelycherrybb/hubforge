@@ -22,11 +22,12 @@ export function TopBar({ appName, user }: TopBarProps) {
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-        <span className="w-6 h-6 rounded bg-[#1a1a2e] flex items-center justify-center">
-          <span className="text-white text-xs font-bold">H</span>
-        </span>
-        <span className="font-bold text-[#1a1a2e] hidden sm:inline tracking-tight">HubForge</span>
+      <Link href="/" className="flex items-center gap-2 shrink-0 group">
+        <img src="/logo.jpg" alt="华检科" className="w-7 h-7 rounded object-cover" />
+        <div className="hidden sm:flex flex-col leading-tight">
+          <span className="text-sm font-bold text-[#1a1a2e] tracking-tight">华检科</span>
+          <span className="text-[10px] text-gray-400 -mt-0.5">HubForge</span>
+        </div>
       </Link>
 
       {/* Nav */}
@@ -51,7 +52,7 @@ export function TopBar({ appName, user }: TopBarProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Admin link - show for both global admin and tenant admin */}
+      {/* Admin link */}
       {showAdmin && (
         <Link
           href="/admin/users"

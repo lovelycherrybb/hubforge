@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "HubForge",
-  description: "一个入口，所有应用",
+  title: "华检科 HubForge",
+  description: "AI 重塑咨询解决方案 — 华检科统一应用门户",
 };
 
 export default function RootLayout({

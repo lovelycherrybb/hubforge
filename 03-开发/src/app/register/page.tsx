@@ -76,12 +76,15 @@ export default function RegisterPage() {
       {/* Left side - brand area */}
       <div className="hidden lg:flex lg:w-2/5 bg-[#1a1a2e] flex-col justify-between p-10">
         <div className="flex items-center gap-3">
-          <span className="w-8 h-8 rounded bg-white/10 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">H</span>
-          </span>
-          <span className="text-white font-bold text-lg tracking-tight">HubForge</span>
+          <img src="/logo.jpg" alt="华检科" className="w-9 h-9 rounded object-cover" />
+          <div className="flex flex-col">
+            <span className="text-white font-bold text-lg tracking-tight">华检科</span>
+            <span className="text-white/50 text-xs">HubForge</span>
+          </div>
         </div>
-        <div />
+        <div>
+          <p className="text-white/40 text-sm">AI 重塑咨询解决方案</p>
+        </div>
       </div>
 
       {/* Right side - register form */}
@@ -90,10 +93,11 @@ export default function RegisterPage() {
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
             <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded bg-[#1a1a2e] flex items-center justify-center">
-                <span className="text-white text-xs font-bold">H</span>
-              </span>
-              <span className="font-bold text-[#1a1a2e] tracking-tight">HubForge</span>
+              <img src="/logo.jpg" alt="华检科" className="w-8 h-8 rounded object-cover" />
+              <div className="flex flex-col">
+                <span className="font-bold text-[#1a1a2e] tracking-tight">华检科</span>
+                <span className="text-xs text-gray-400 -mt-0.5">HubForge</span>
+              </div>
             </div>
           </div>
 

@@ -18,7 +18,7 @@ export function AdminSidebar() {
   return (
     <aside className="hidden lg:block w-56 bg-white border-r border-gray-200 shrink-0 overflow-y-auto">
       <div className="px-4 py-3 border-b border-gray-100">
-        <h2 className="text-sm font-semibold text-[#333]">后台管理</h2>
+        <h2 className="text-sm font-semibold text-[#333]">华检科 HubForge</h2>
       </div>
       <nav className="p-2 space-y-0.5">
         {navItems.map((item) => (
