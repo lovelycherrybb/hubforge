@@ -102,8 +102,8 @@ export default function LoginPage() {
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="华检科" className="w-9 h-9 rounded object-cover" />
           <div className="flex flex-col">
-            <span className="text-white font-bold text-lg tracking-tight">华检科</span>
-            <span className="text-white/50 text-xs">HubForge</span>
+            <span className="text-white font-bold text-lg tracking-tight">华检科 HubForge</span>
+            <span className="text-white/50 text-xs">AI 重塑咨询解决方案</span>
           </div>
         </div>
         <div>
@@ -122,8 +122,8 @@ export default function LoginPage() {
             <div className="flex items-center gap-2.5">
               <img src="/logo.png" alt="华检科" className="w-8 h-8 rounded object-cover" />
               <div className="flex flex-col">
-                <span className="font-bold text-[#1a1a2e] tracking-tight">华检科</span>
-                <span className="text-xs text-gray-400 -mt-0.5">HubForge</span>
+                <span className="font-bold text-[#1a1a2e] tracking-tight">华检科 HubForge</span>
+                <span className="text-xs text-gray-400">AI 重塑咨询解决方案</span>
               </div>
             </div>
           </div>
