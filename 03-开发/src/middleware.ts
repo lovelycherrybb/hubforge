@@ -96,16 +96,24 @@ export async function middleware(request: NextRequest) {
   }
 
   // 4. 权限中间件 - 管理员路由检查
-  if (isAdminPath(pathname) && tokenPayload && !tokenPayload.isGlobalAdmin) {
-    // API 路由返回 403
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        { success: false, error: "权限不足" },
-        { status: 403 }
-      );
+  if (isAdminPath(pathname) && tokenPayload) {
+    const isGlobalAdmin = tokenPayload.isGlobalAdmin;
+
+    // /admin/tenants 路径仅限主租户
+    if (pathname.startsWith("/admin/tenants") && !isGlobalAdmin) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ success: false, error: "仅限主租户" }, { status: 403 });
+      }
+      return NextResponse.redirect(new URL("/", request.url));
     }
-    // 页面路由重定向到首页
-    return NextResponse.redirect(new URL("/", request.url));
+
+    // /api/tenants（租户管理API）仅限主租户
+    if (pathname.startsWith("/api/tenants") && !pathname.includes("/users") && !pathname.includes("/apps") && !isGlobalAdmin) {
+      return NextResponse.json({ success: false, error: "仅限主租户" }, { status: 403 });
+    }
+
+    // 其他 /admin 路径需要是管理员（全局或租户）
+    // 暂时通过，具体权限在 API 层校验
   }
 
   // 5. 继续处理请求，附加自定义头

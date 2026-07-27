@@ -4,16 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/admin/tenants", label: "租户" },
-  { href: "/admin/users", label: "用户" },
-  { href: "/admin/departments", label: "部门" },
-  { href: "/admin/permissions", label: "权限" },
-  { href: "/admin/apps", label: "应用" },
-];
+interface AdminSidebarProps {
+  isGlobalAdmin?: boolean;
+}
 
-export function AdminSidebar() {
+export function AdminSidebar({ isGlobalAdmin }: AdminSidebarProps) {
   const pathname = usePathname();
+
+  const navItems = [
+    // 租户管理仅主租户可见
+    ...(isGlobalAdmin ? [{ href: "/admin/tenants", label: "租户" }] : []),
+    { href: "/admin/users", label: "用户" },
+    { href: "/admin/departments", label: "部门" },
+    { href: "/admin/permissions", label: "权限" },
+    { href: "/admin/apps", label: "应用" },
+  ];
 
   return (
     <aside className="hidden lg:block w-56 bg-white border-r border-gray-200 shrink-0 overflow-y-auto">

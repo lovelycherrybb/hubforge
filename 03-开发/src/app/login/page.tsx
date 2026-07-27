@@ -103,7 +103,7 @@ export default function LoginPage() {
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: "url('/login-bg.jpg')" }}
         />
-        <div className="absolute inset-0 bg-[#1a1a2e]/60" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a2e]/80 via-transparent to-[#1a1a2e]/70" />
         <div className="relative z-10 flex items-center gap-3">
           <img src="/logo.png" alt="华检科" className="w-9 h-9 rounded object-cover" />
           <div className="flex flex-col">
