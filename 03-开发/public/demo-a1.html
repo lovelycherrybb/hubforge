@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案A-1: 公路网络粒子</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a14; display: flex; height: 100vh; font-family: 'Inter', sans-serif; }
+.panel { width: 40%; height: 100vh; position: relative; overflow: hidden; }
+.panel canvas { position: absolute; inset: 0; }
+.brand { position: absolute; top: 40px; left: 40px; z-index: 10; display: flex; align-items: center; gap: 12px; }
+.brand-icon { width: 36px; height: 36px; background: rgba(255,255,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.brand-icon svg { width: 20px; height: 20px; fill: white; }
+.brand-text { display: flex; flex-direction: column; }
+.brand-name { color: white; font-weight: 700; font-size: 16px; letter-spacing: -0.5px; }
+.brand-sub { color: rgba(255,255,255,0.4); font-size: 11px; }
+.time { position: absolute; bottom: 40px; left: 40px; z-index: 10; color: rgba(255,255,255,0.15); font-size: 12px; }
+.label { position: absolute; bottom: 40px; right: 40px; z-index: 10; color: rgba(255,255,255,0.3); font-size: 11px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 4px; }
+.right { flex: 1; display: flex; align-items: center; justify-content: center; background: #fafafa; }
+.form-box { width: 320px; }
+.form-box h2 { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 24px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+.field input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+.field input:focus { border-color: #1a1a2e; box-shadow: 0 0 0 3px rgba(26,26,46,0.08); }
+.btn { width: 100%; padding: 11px; background: #1a1a2e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <canvas id="canvas"></canvas>
+  <div class="brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <div class="brand-text">
+      <span class="brand-name">华检科 HubForge</span>
+      <span class="brand-sub">AI 重塑咨询解决方案</span>
+    </div>
+  </div>
+  <div class="time">2026.07</div>
+  <div class="label">设计方向 A-1 · 公路网络粒子</div>
+</div>
+<div class="right">
+  <div class="form-box">
+    <h2>登录</h2>
+    <div class="field"><label>邮箱</label><input type="text" placeholder="you@company.com" /></div>
+    <div class="field"><label>密码</label><input type="password" placeholder="输入你的密码" /></div>
+    <button class="btn">登 录</button>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H, particles = [], mouse = { x: -999, y: -999 };
+
+function resize() {
+  W = canvas.width = canvas.offsetWidth;
+  H = canvas.height = canvas.offsetHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+canvas.addEventListener('mouseleave', () => { mouse.x = -999; mouse.y = -999; });
+
+// 公路网络路径点 (抽象高速公路立交)
+const routes = [
+  // 主干道 — 横向
+  [{ x: 0, y: 0.35 }, { x: 0.3, y: 0.33 }, { x: 0.55, y: 0.38 }, { x: 0.75, y: 0.32 }, { x: 1, y: 0.35 }],
+  // 主干道 — 纵向
+  [{ x: 0.4, y: 0 }, { x: 0.42, y: 0.25 }, { x: 0.38, y: 0.5 }, { x: 0.4, y: 0.75 }, { x: 0.42, y: 1 }],
+  // 匝道弧线
+  [{ x: 0.3, y: 0.33 }, { x: 0.35, y: 0.45 }, { x: 0.42, y: 0.5 }],
+  [{ x: 0.55, y: 0.38 }, { x: 0.6, y: 0.5 }, { x: 0.65, y: 0.65 }],
+  // 桥梁拱形
+  [{ x: 0.15, y: 0.6 }, { x: 0.25, y: 0.45 }, { x: 0.38, y: 0.5 }],
+  // 右侧延伸
+  [{ x: 0.65, y: 0.65 }, { x: 0.78, y: 0.6 }, { x: 0.9, y: 0.55 }],
+  [{ x: 0.75, y: 0.32 }, { x: 0.78, y: 0.45 }, { x: 0.78, y: 0.6 }],
+];
+
+// 沿路径插值生成粒子
+function lerp(a, b, t) { return a + (b - a) * t; }
+function getPointsOnPath(path, count) {
+  const pts = [];
+  for (let i = 0; i < count; i++) {
+    const t = i / (count - 1);
+    const segCount = path.length - 1;
+    const seg = Math.min(Math.floor(t * segCount), segCount - 1);
+    const lt = (t * segCount) - seg;
+    pts.push({
+      x: lerp(path[seg].x, path[seg + 1].x, lt) * W,
+      y: lerp(path[seg].y, path[seg + 1].y, lt) * H,
+    });
+  }
+  return pts;
+}
+
+// 安全帽轮廓点 (简笔画)
+const helmetPoints = [];
+const cx = W * 0.72, cy = H * 0.78, r = 35;
+for (let a = -Math.PI; a <= 0; a += 0.15) {
+  helmetPoints.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.7 - 5 });
+}
+// 帽檐
+for (let i = -45; i <= 45; i += 6) {
+  helmetPoints.push({ x: cx + i, y: cy + 3 });
+}
+
+function init() {
+  particles = [];
+  // 随机背景粒子
+  for (let i = 0; i < 80; i++) {
+    particles.push({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.5 + 0.5, type: 'bg',
+      opacity: Math.random() * 0.5 + 0.2,
+    });
+  }
+  // 公路路径粒子
+  routes.forEach((route, ri) => {
+    const pts = getPointsOnPath(route, 12 + ri * 2);
+    pts.forEach(p => {
+      particles.push({
+        x: p.x + (Math.random() - 0.5) * 8,
+        y: p.y + (Math.random() - 0.5) * 8,
+        ox: p.x, oy: p.y,
+        vx: 0, vy: 0,
+        r: Math.random() * 1.2 + 0.8,
+        type: 'road',
+        opacity: Math.random() * 0.4 + 0.3,
+      });
+    });
+  });
+  // 安全帽轮廓粒子
+  helmetPoints.forEach(p => {
+    particles.push({
+      x: p.x + (Math.random() - 0.5) * 4,
+      y: p.y + (Math.random() - 0.5) * 4,
+      ox: p.x, oy: p.y,
+      vx: 0, vy: 0,
+      r: Math.random() * 1 + 0.8,
+      type: 'helmet',
+      opacity: Math.random() * 0.3 + 0.3,
+    });
+  });
+}
+init();
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 深蓝渐变背景
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0d0d1a');
+  bg.addColorStop(0.5, '#1a1a2e');
+  bg.addColorStop(1, '#0f0f20');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 微妙光晕
+  const glow = ctx.createRadialGradient(W * 0.3, H * 0.4, 0, W * 0.3, H * 0.4, W * 0.5);
+  glow.addColorStop(0, 'rgba(30,60,120,0.15)');
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  const time = Date.now() * 0.001;
+
+  // 更新 & 绘制粒子
+  particles.forEach(p => {
+    // 鼠标排斥
+    const dx = p.x - mouse.x, dy = p.y - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 100) {
+      const force = (100 - dist) / 100 * 2;
+      p.x += (dx / dist) * force;
+      p.y += (dy / dist) * force;
+    }
+
+    if (p.type === 'bg') {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+    } else if (p.ox !== undefined) {
+      // 结构粒子回弹
+      p.x += (p.ox - p.x) * 0.02;
+      p.y += (p.oy - p.y) * 0.02;
+      // 微微呼吸
+      p.x += Math.sin(time + p.ox * 0.01) * 0.15;
+      p.y += Math.cos(time + p.oy * 0.01) * 0.15;
+    }
+
+    // 绘制粒子
+    const pulse = 0.5 + 0.5 * Math.sin(time * 2 + p.x * 0.01 + p.y * 0.01);
+    const alpha = p.opacity * (0.6 + pulse * 0.4);
+
+    if (p.type === 'road') {
+      ctx.fillStyle = `rgba(80,160,255,${alpha})`;
+    } else if (p.type === 'helmet') {
+      ctx.fillStyle = `rgba(255,200,60,${alpha * 0.8})`;
+    } else {
+      ctx.fillStyle = `rgba(140,180,255,${alpha})`;
+    }
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (0.8 + pulse * 0.4), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 发光
+    if (p.r > 1) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+      if (p.type === 'road') {
+        g.addColorStop(0, `rgba(80,160,255,${alpha * 0.3})`);
+      } else if (p.type === 'helmet') {
+        g.addColorStop(0, `rgba(255,200,60,${alpha * 0.2})`);
+      } else {
+        g.addColorStop(0, `rgba(140,180,255,${alpha * 0.2})`);
+      }
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+  });
+
+  // 连线
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const a = particles[i], b = particles[j];
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = a.type === 'bg' && b.type === 'bg' ? 120 : 80;
+      if (dist < maxDist) {
+        const alpha = (1 - dist / maxDist) * 0.15;
+        let color;
+        if (a.type === 'helmet' || b.type === 'helmet') {
+          color = `rgba(255,200,60,${alpha})`;
+        } else if (a.type === 'road' || b.type === 'road') {
+          color = `rgba(80,160,255,${alpha})`;
+        } else {
+          color = `rgba(140,180,255,${alpha})`;
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>

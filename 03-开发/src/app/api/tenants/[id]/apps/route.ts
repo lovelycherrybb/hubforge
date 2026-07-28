@@ -1,6 +1,7 @@
+// ============================================================
 // GET  /api/tenants/[id]/apps — 获取租户已分配的应用
 // POST /api/tenants/[id]/apps — 给租户分配/取消应用
-// 权限要求：主租户管理员
+// 权限要求：owner 角色（平台管理员）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -15,10 +16,6 @@ const assignAppSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
-const unassignAppSchema = z.object({
-  appId: z.string(),
-});
-
 // GET — 获取租户已分配的应用列表
 export async function GET(
   request: NextRequest,
@@ -26,7 +23,7 @@ export async function GET(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限主租户");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
   if (!tenant) return notFound("租户不存在");
@@ -47,7 +44,7 @@ export async function POST(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限主租户");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
   if (!tenant) return notFound("租户不存在");
@@ -75,6 +72,12 @@ export async function POST(
     return success(updated);
   }
 
+  // 检查应用配额
+  const appCount = await db.tenantApp.count({ where: { tenantId: params.id } });
+  if (appCount >= tenant.maxApps) {
+    return error(`已达到应用数量上限 (${tenant.maxApps})`);
+  }
+
   // 新增分配
   const tenantApp = await db.tenantApp.create({
     data: { tenantId: params.id, appId, enabled },
@@ -90,7 +93,7 @@ export async function DELETE(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限主租户");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
   const appId = request.nextUrl.searchParams.get("appId");
   if (!appId) return error("缺少 appId 参数");

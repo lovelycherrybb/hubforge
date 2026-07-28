@@ -1,0 +1,40 @@
+# ============================================================
+# HubForge - Cluster 部署：Portal 多实例 + Nginx 负载均衡
+# 启动: docker compose -f docker-compose.portal.yml up -d
+# 扩容: docker compose -f docker-compose.portal.yml up -d --scale portal=3
+# ============================================================
+
+version: "3.9"
+
+services:
+  # HubForge Portal（支持水平扩展）
+  portal:
+    build:
+      context: ../../03-开发
+      dockerfile: Dockerfile
+    image: hubforge-portal:latest
+    restart: unless-stopped
+    # 注意：集群模式下不指定 container_name 以支持 scale
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?请设置 DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:?请设置 JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      COOKIE_NAME: ${COOKIE_NAME:-hubforge-token}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
+    # 不直接暴露端口，通过 nginx 代理
+    expose:
+      - "3000"
+
+  # Nginx 负载均衡器
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hubforge-lb
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ../nginx/cluster.conf:/etc/nginx/conf.d/default.conf:ro
+      # - /etc/letsencrypt:/etc/letsencrypt:ro  # SSL 证书
+    depends_on:
+      - portal

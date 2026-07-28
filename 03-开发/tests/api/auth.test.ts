@@ -15,37 +15,42 @@ describe('POST /api/auth/register — 用户注册', () => {
     return await import('@/app/api/auth/register/route');
   }
 
-  it('正常注册新用户 → 返回成功（TC-001）', async () => {
-    // 准备：模拟邮箱和 slug 均不存在
-    mockPrisma.tenant.findUnique.mockResolvedValue(null); // slug 不重复
-    mockPrisma.user.findFirst.mockResolvedValue(null);    // 邮箱不重复
+  it('正常注册新租户 → 返回成功（TC-001）', async () => {
+    // 注册API现在是admin-only，需要owner token
+    const ownerToken = await createAuthToken('owner-001', 'tenant-001', true);
 
-    // 模拟事务：创建租户和用户
-    const mockTenant = createTestTenant({ id: 'new-tenant-id' });
-    const mockUser = createTestUser({
-      id: 'new-user-id',
-      tenantId: 'new-tenant-id',
-      isGlobalAdmin: true,
-    });
+    // 准备：模拟 slug 不存在
+    mockPrisma.tenant.findUnique.mockResolvedValue(null); // slug 不重复
+
+    // 模拟事务
+    const mockTenant = createTestTenant({ id: 'new-tenant-id', slug: 'new-tenant' });
+    const mockNewUser = { id: 'new-user-id', email: 'new@example.com', name: '新用户' };
     mockPrisma.$transaction.mockImplementation(async (fn: any) => {
-      return fn({
+      const tx = {
         tenant: { create: vi.fn().mockResolvedValue(mockTenant) },
-        user: { create: vi.fn().mockResolvedValue(mockUser) },
-      });
+        user: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue(mockNewUser),
+        },
+        userTenant: { create: vi.fn().mockResolvedValue({}) },
+      };
+      return fn(tx);
     });
 
     const { POST } = await getRoute();
 
-    // 构造请求
     const request = new Request('http://localhost:3000/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `hubforge-token=${ownerToken}`,
+      },
       body: JSON.stringify({
         tenantName: '新租户',
         tenantSlug: 'new-tenant',
-        email: 'new@example.com',
-        password: 'Abcd@1234',
-        name: '新用户',
+        adminEmail: 'new@example.com',
+        adminName: '新用户',
+        adminPassword: 'Abcd@1234',
       }),
     }) as any;
 
@@ -54,28 +59,32 @@ describe('POST /api/auth/register — 用户注册', () => {
 
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
-    expect(data.message).toBe('注册成功');
-    expect(data.data.user.email).toBe('test@example.com'); // mockUser 的默认邮箱
+    expect(data.message).toBe('租户创建成功');
+    expect(data.data.admin.email).toBe('new@example.com');
   });
 
-  it('重复邮箱注册 → 返回错误（TC-002）', async () => {
-    // slug 不存在，但邮箱已存在
-    mockPrisma.tenant.findUnique.mockResolvedValue(null);
-    mockPrisma.user.findFirst.mockResolvedValue(
-      createTestUser({ email: 'exist@example.com' })
+  it('重复slug注册 → 返回错误（TC-002）', async () => {
+    const ownerToken = await createAuthToken('owner-001', 'tenant-001', true);
+
+    // slug 已存在
+    mockPrisma.tenant.findUnique.mockResolvedValue(
+      createTestTenant({ slug: 'existing-slug' })
     );
 
     const { POST } = await getRoute();
 
     const request = new Request('http://localhost:3000/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `hubforge-token=${ownerToken}`,
+      },
       body: JSON.stringify({
         tenantName: '测试租户',
-        tenantSlug: 'test-slug',
-        email: 'exist@example.com',
-        password: 'Abcd@1234',
-        name: '测试',
+        tenantSlug: 'existing-slug',
+        adminEmail: 'test@example.com',
+        adminName: '测试',
+        adminPassword: 'Abcd@1234',
       }),
     }) as any;
 
@@ -83,7 +92,7 @@ describe('POST /api/auth/register — 用户注册', () => {
     const data = await response.json();
 
     expect(data.success).toBe(false);
-    expect(data.error).toContain('邮箱');
+    expect(data.error).toContain('租户标识');
   });
 
   it('弱密码注册 → 返回 400（TC-003）', async () => {
@@ -134,28 +143,57 @@ describe('POST /api/auth/login — 用户登录', () => {
     return await import('@/app/api/auth/login/route');
   }
 
-  it('正常登录 → 写入 httpOnly Cookie（TC-005）', async () => {
-    // bcrypt hash for 'Abcd@1234' with cost 12
-    const bcrypt = await import('bcryptjs');
-    const passwordHash = await bcrypt.hash('Abcd@1234', 12);
+  const TEST_EMAIL = 'test@example.com';
+  const TEST_PASSWORD = 'Abcd@1234';
+  const TENANT_ID = 'tenant-test-001';
 
-    mockPrisma.user.findFirst.mockResolvedValue(
-      createTestUser({
-        passwordHash,
-        status: 'active',
-        tenant: createTestTenant(),
-      })
-    );
+  /** Step1 mock: 返回用户+租户列表 */
+  function mockStep1(passwordHash: string, userOverrides: Record<string, any> = {}) {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-test-001',
+      email: TEST_EMAIL,
+      name: '测试用户',
+      tenantMemberships: [{
+        id: 'ut-001',
+        tenantId: TENANT_ID,
+        role: 'admin',
+        status: userOverrides.status || 'active',
+        tenant: createTestTenant({ id: TENANT_ID }),
+      }],
+    });
+  }
+
+  /** Step2 mock: 返回 userTenant 记录 */
+  function mockStep2(passwordHash: string, utOverrides: Record<string, any> = {}) {
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-test-001' });
+    mockPrisma.userTenant.findUnique.mockResolvedValue({
+      id: 'ut-001',
+      userId: 'user-test-001',
+      tenantId: TENANT_ID,
+      role: 'admin',
+      status: utOverrides.status || 'active',
+      passwordHash,
+      failedAttempts: utOverrides.failedAttempts || 0,
+      lockedUntil: utOverrides.lockedUntil || null,
+      user: { id: 'user-test-001', email: TEST_EMAIL, name: '测试用户' },
+      tenant: createTestTenant({ id: TENANT_ID }),
+    });
+  }
+
+  function loginStep2Body(overrides: Record<string, any> = {}) {
+    return { email: TEST_EMAIL, tenantId: TENANT_ID, step: 2, ...overrides };
+  }
+
+  it('正常登录 → 写入 httpOnly Cookie（TC-005）', async () => {
+    const bcrypt = await import('bcryptjs');
+    const passwordHash = await bcrypt.hash(TEST_PASSWORD, 12);
+    mockStep2(passwordHash);
 
     const { POST } = await getRoute();
-
     const request = new Request('http://localhost:3000/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'test@example.com',
-        password: 'Abcd@1234',
-      }),
+      body: JSON.stringify(loginStep2Body({ password: TEST_PASSWORD })),
     }) as any;
 
     const response = await POST(request);
@@ -164,31 +202,20 @@ describe('POST /api/auth/login — 用户登录', () => {
     expect(response.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.message).toBe('登录成功');
-    expect(data.data.user.email).toBe('test@example.com');
+    expect(data.data.user.email).toBe(TEST_EMAIL);
   });
 
   it('错误密码 → 返回 401（TC-006）', async () => {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash('Correct@123', 12);
-
-    mockPrisma.user.findFirst.mockResolvedValue(
-      createTestUser({
-        passwordHash,
-        failedLoginAttempts: 0,
-        tenant: createTestTenant(),
-      })
-    );
-    mockPrisma.user.update.mockResolvedValue({});
+    mockStep2(passwordHash, { failedAttempts: 0 });
+    mockPrisma.userTenant.update.mockResolvedValue({});
 
     const { POST } = await getRoute();
-
     const request = new Request('http://localhost:3000/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'test@example.com',
-        password: 'WrongPassword@1',
-      }),
+      body: JSON.stringify(loginStep2Body({ password: 'WrongPassword@1' })),
     }) as any;
 
     const response = await POST(request);
@@ -202,65 +229,40 @@ describe('POST /api/auth/login — 用户登录', () => {
   it('5 次错误密码后锁定 → 返回 403（TC-007）', async () => {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash('Correct@123', 12);
-
-    // 第 5 次错误尝试（failedLoginAttempts 已经是 4）
-    mockPrisma.user.findFirst.mockResolvedValue(
-      createTestUser({
-        passwordHash,
-        failedLoginAttempts: 4,
-        tenant: createTestTenant(),
-      })
-    );
-    mockPrisma.user.update.mockResolvedValue({});
+    mockStep2(passwordHash, { failedAttempts: 4 });
+    mockPrisma.userTenant.update.mockResolvedValue({});
 
     const { POST } = await getRoute();
-
     const request = new Request('http://localhost:3000/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'test@example.com',
-        password: 'WrongPassword@1',
-      }),
+      body: JSON.stringify(loginStep2Body({ password: 'WrongPassword@1' })),
     }) as any;
 
     const response = await POST(request);
     const data = await response.json();
 
-    // 第 5 次失败后应锁定
     expect(data.success).toBe(false);
     expect(data.error).toContain('锁定');
   });
 
-  it('未激活用户登录 → 返回 403（TC-009）', async () => {
+  it('未激活用户登录 → 仍可登录（新流程不做invited拦截）', async () => {
     const bcrypt = await import('bcryptjs');
-    const passwordHash = await bcrypt.hash('Abcd@1234', 12);
-
-    mockPrisma.user.findFirst.mockResolvedValue(
-      createTestUser({
-        passwordHash,
-        status: 'invited', // 未激活
-        tenant: createTestTenant(),
-      })
-    );
+    const passwordHash = await bcrypt.hash(TEST_PASSWORD, 12);
+    mockStep2(passwordHash, { status: 'invited' });
 
     const { POST } = await getRoute();
-
     const request = new Request('http://localhost:3000/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: 'test@example.com',
-        password: 'Abcd@1234',
-      }),
+      body: JSON.stringify(loginStep2Body({ password: TEST_PASSWORD })),
     }) as any;
 
     const response = await POST(request);
     const data = await response.json();
 
-    expect(data.success).toBe(false);
-    expect(response.status).toBe(403);
-    expect(data.error).toContain('激活');
+    // 新两步登录流程只拦截 suspended 状态，invited 不拦截
+    expect(data.success).toBe(true);
   });
 });
 
@@ -285,26 +287,39 @@ describe('POST /api/auth/logout — 用户登出', () => {
 // ============================================================
 describe('GET /api/auth/me — 获取当前用户信息', () => {
   it('已登录 → 返回用户信息和权限', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', true);
+    const token = await createAuthToken('user-001', 'tenant-001', false);
 
-    const userWithRelations = createTestUser({
+    // API 现在分别查询 user、tenant、userTenant、userPermission、userOrganization
+    mockPrisma.user.findUnique.mockResolvedValue({
       id: 'user-001',
-      tenantId: 'tenant-001',
-      departmentId: null,
-      department: null,
-      tenant: createTestTenant(),
-      grantedPermissions: [
-        {
-          permission: {
-            key: 'app.inspection.view',
-            label: '查看巡检',
-            type: 'app',
-          },
-        },
-      ],
+      email: 'test@example.com',
+      name: '测试用户',
+      avatarUrl: null,
     });
 
-    mockPrisma.user.findUnique.mockResolvedValue(userWithRelations);
+    mockPrisma.tenant.findUnique.mockResolvedValue({
+      id: 'tenant-001',
+      name: '测试租户',
+      slug: 'test-tenant',
+      logoUrl: null,
+    });
+
+    mockPrisma.userTenant.findUnique.mockResolvedValue({
+      role: 'admin',
+      status: 'active',
+    });
+
+    mockPrisma.userPermission.findMany.mockResolvedValue([
+      {
+        permission: {
+          key: 'app.inspection.view',
+          label: '查看巡检',
+          type: 'app',
+        },
+      },
+    ]);
+
+    mockPrisma.userOrganization.findFirst.mockResolvedValue(null);
     mockPrisma.departmentPermission.findMany.mockResolvedValue([]);
 
     const { GET } = await import('@/app/api/auth/me/route');
@@ -324,6 +339,8 @@ describe('GET /api/auth/me — 获取当前用户信息', () => {
     expect(data.data.id).toBe('user-001');
     expect(data.data.permissions).toHaveLength(1);
     expect(data.data.permissions[0].key).toBe('app.inspection.view');
+    expect(data.data.role).toBe('admin');
+    expect(data.data.tenant.id).toBe('tenant-001');
   });
 
   it('未登录 → 返回 401', async () => {

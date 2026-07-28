@@ -9,15 +9,14 @@ interface TopBarProps {
   user?: {
     email: string;
     name?: string;
-    isGlobalAdmin?: boolean;
-    isTenantAdmin?: boolean;
+    role?: "owner" | "admin" | "member";
     tenant?: { name: string };
   };
 }
 
 export function TopBar({ appName, user }: TopBarProps) {
   const pathname = usePathname();
-  const showAdmin = user?.isGlobalAdmin || user?.isTenantAdmin;
+  const showAdmin = user?.role === "owner" || user?.role === "admin";
 
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">

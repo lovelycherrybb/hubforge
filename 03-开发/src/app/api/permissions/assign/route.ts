@@ -1,7 +1,8 @@
 // ============================================================
-// POST /api/permissions/assign — 分配权限（用户/部门）
-// 权限要求：租户管理员
+// POST /api/permissions/assign — 分配权限（用户/部门/租户框架权限）
+// 权限要求：租户管理员（owner 或 admin）
 // 类型隔离：租户管理员不能分配框架权限
+// 框架权限可通过 tenantId 参数授予给租户
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -16,25 +17,29 @@ const assignPermissionSchema = z.object({
   permissionId: z.string().min(1),
   userId: z.string().optional(),
   departmentId: z.string().optional(),
+  tenantId: z.string().optional(), // 目标租户 ID（框架权限授予租户）
   action: z.enum(["grant", "revoke"]),
 }).refine(
-  (data) => data.userId || data.departmentId,
-  { message: "必须指定 userId 或 departmentId" }
+  (data) => data.userId || data.departmentId || data.tenantId,
+  { message: "必须指定 userId、departmentId 或 tenantId" }
 );
 
 export async function POST(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, assignPermissionSchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
-      const { permissionId, userId, departmentId, action } = parsed.data;
+      const { permissionId, userId, departmentId, tenantId, action } = parsed.data;
 
       // 验证权限存在
       const permission = await db.permission.findFirst({
@@ -48,20 +53,52 @@ export async function POST(request: NextRequest) {
       });
       if (!permission) return error("权限不存在");
 
-      // 类型隔离：非平台管理员不能操作框架权限
-      if (permission.type === "framework" && !payload.isGlobalAdmin) {
+      // 类型隔离：非 owner 不能操作框架权限
+      if (permission.type === "framework" && payload.role !== "owner") {
         return forbidden("租户管理员不能分配框架权限");
+      }
+
+      // ============================================================
+      // 框架权限授予/撤销租户（TenantPermission）
+      // ============================================================
+      if (tenantId && permission.type === "framework") {
+        if (action === "grant") {
+          await db.tenantPermission.upsert({
+            where: {
+              tenantId_permissionId: { tenantId, permissionId },
+            },
+            create: {
+              tenantId,
+              permissionId,
+              grantedBy: payload.userId,
+            },
+            update: {}, // 已存在则跳过
+          });
+          return success(null, "框架权限已授予租户");
+        }
+
+        if (action === "revoke") {
+          await db.tenantPermission.deleteMany({
+            where: { tenantId, permissionId },
+          });
+          return success(null, "已撤销租户框架权限");
+        }
       }
 
       if (action === "grant") {
         if (userId) {
-          // 分配权限给用户
+          // 分配权限给用户（含 tenantId 三元唯一约束）
           await db.userPermission.upsert({
             where: {
-              userId_permissionId: { userId, permissionId },
+              userId_tenantId_permissionId: {
+                userId,
+                tenantId: payload.tenantId,
+                permissionId,
+              },
             },
             create: {
               userId,
+              tenantId: payload.tenantId,
               permissionId,
               grantedBy: payload.userId,
             },
@@ -90,7 +127,7 @@ export async function POST(request: NextRequest) {
       if (action === "revoke") {
         if (userId) {
           await db.userPermission.deleteMany({
-            where: { userId, permissionId },
+            where: { userId, permissionId, tenantId: payload.tenantId },
           });
           return success(null, "已撤销用户权限");
         }

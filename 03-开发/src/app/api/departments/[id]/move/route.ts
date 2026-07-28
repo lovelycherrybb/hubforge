@@ -1,6 +1,6 @@
 // ============================================================
 // PUT /api/departments/:id/move — 移动部门（变更父级）
-// 权限要求：租户管理员
+// 权限要求：租户管理员（owner 或 admin）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -21,14 +21,17 @@ export async function PUT(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, moveDepartmentSchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const dept = await db.department.findFirst({
         where: { id: params.id, tenantId: payload.tenantId },

@@ -14,14 +14,14 @@ export async function GET(request: NextRequest) {
     return unauthorized();
   }
 
+  // 获取用户基本信息
   const user = await db.user.findUnique({
     where: { id: payload.userId },
-    include: {
-      tenant: true,
-      department: true,
-      grantedPermissions: {
-        include: { permission: true },
-      },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      avatarUrl: true,
     },
   });
 
@@ -29,18 +29,72 @@ export async function GET(request: NextRequest) {
     return unauthorized("用户不存在");
   }
 
-  // 合并个人权限 + 部门权限
-  const personalPermissions = user.grantedPermissions.map((up) => ({
-    key: up.permission.key,
-    label: up.permission.label,
-    type: up.permission.type,
-  }));
+  // 获取当前租户信息
+  const tenant = await db.tenant.findUnique({
+    where: { id: payload.tenantId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      logoUrl: true,
+    },
+  });
 
-  let departmentPermissions: { key: string; label: string; type: string }[] = [];
-  if (user.departmentId) {
+  if (!tenant) {
+    return unauthorized("租户不存在");
+  }
+
+  // 获取用户在当前租户下的角色
+  const userTenant = await db.userTenant.findUnique({
+    where: {
+      userId_tenantId: {
+        userId: payload.userId,
+        tenantId: payload.tenantId,
+      },
+    },
+    select: {
+      role: true,
+      status: true,
+    },
+  });
+
+  // 获取用户在当前租户下的权限
+  const permissions = await db.userPermission.findMany({
+    where: {
+      userId: payload.userId,
+      tenantId: payload.tenantId,
+    },
+    include: {
+      permission: {
+        select: {
+          key: true,
+          label: true,
+          type: true,
+        },
+      },
+    },
+  });
+
+  // 获取部门权限（如果用户属于某个部门）
+  const userOrg = await db.userOrganization.findFirst({
+    where: { userId: payload.userId },
+    select: { organizationId: true },
+  });
+
+  let departmentPermissions: { key: string; label: string; type: string }[] =
+    [];
+  if (userOrg) {
     const deptPerms = await db.departmentPermission.findMany({
-      where: { departmentId: user.departmentId },
-      include: { permission: true },
+      where: { departmentId: userOrg.organizationId },
+      include: {
+        permission: {
+          select: {
+            key: true,
+            label: true,
+            type: true,
+          },
+        },
+      },
     });
     departmentPermissions = deptPerms.map((dp) => ({
       key: dp.permission.key,
@@ -49,7 +103,13 @@ export async function GET(request: NextRequest) {
     }));
   }
 
-  // 去重合并（个人权限 ∪ 部门权限）
+  // 合并个人权限 + 部门权限（取并集）
+  const personalPermissions = permissions.map((up) => ({
+    key: up.permission.key,
+    label: up.permission.label,
+    type: up.permission.type,
+  }));
+
   const permMap = new Map<string, { key: string; label: string; type: string }>();
   for (const p of [...personalPermissions, ...departmentPermissions]) {
     permMap.set(p.key, p);
@@ -59,16 +119,10 @@ export async function GET(request: NextRequest) {
     id: user.id,
     email: user.email,
     name: user.name,
-    status: user.status,
-    isGlobalAdmin: user.isGlobalAdmin,
-    tenant: {
-      id: user.tenant.id,
-      name: user.tenant.name,
-      slug: user.tenant.slug,
-    },
-    department: user.department
-      ? { id: user.department.id, name: user.department.name }
-      : null,
+    avatarUrl: user.avatarUrl,
+    tenant,
+    role: userTenant?.role || "member",
+    status: userTenant?.status || "active",
     permissions: Array.from(permMap.values()),
   });
 }

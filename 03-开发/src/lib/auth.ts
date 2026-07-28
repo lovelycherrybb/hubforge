@@ -19,7 +19,7 @@ export interface TokenPayload extends JWTPayload {
   userId: string;
   tenantId: string;
   email: string;
-  isGlobalAdmin: boolean;
+  role: "owner" | "admin" | "member"; // 用户在当前租户下的角色
 }
 
 /**
@@ -27,7 +27,9 @@ export interface TokenPayload extends JWTPayload {
  * @param payload - 要写入 token 的用户信息
  * @returns 签名后的 JWT 字符串
  */
-export async function signToken(payload: Omit<TokenPayload, "iat" | "exp">): Promise<string> {
+export async function signToken(
+  payload: Omit<TokenPayload, "iat" | "exp">
+): Promise<string> {
   return new SignJWT(payload as unknown as JWTPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -54,7 +56,9 @@ export async function verifyToken(token: string): Promise<TokenPayload | null> {
  * @param request - Next.js 请求对象
  * @returns 解码后的 payload，未认证返回 null
  */
-export async function getAuthUser(request: NextRequest): Promise<TokenPayload | null> {
+export async function getAuthUser(
+  request: NextRequest
+): Promise<TokenPayload | null> {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyToken(token);
@@ -74,3 +78,8 @@ export function getCookieOptions() {
 }
 
 export { COOKIE_NAME };
+
+/** 判断当前用户是否为管理员（owner 或 admin 角色） */
+export function isAdmin(payload: TokenPayload): boolean {
+  return payload.role === "owner" || payload.role === "admin";
+}

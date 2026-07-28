@@ -12,7 +12,7 @@ import { mockPrisma, createTestUser, createTestTenant, createAuthToken } from '.
 describe('GET /api/tenants — 租户列表', () => {
   it('主租户管理员查看租户列表 → 返回全部租户', async () => {
     // 主租户管理员 token
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     const tenants = [
       createTestTenant({ id: 't1', name: '租户A', slug: 'tenant-a' }),
@@ -39,7 +39,7 @@ describe('GET /api/tenants — 租户列表', () => {
   });
 
   it('非全局管理员查看租户列表 → 返回 403', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const { GET } = await import('@/app/api/tenants/route');
 
@@ -75,7 +75,7 @@ describe('GET /api/tenants — 租户列表', () => {
 // ============================================================
 describe('POST /api/tenants — 创建租户', () => {
   it('主租户管理员创建新租户 → 成功（TC-019）', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     // slug 和邮箱均不存在
     mockPrisma.tenant.findUnique.mockResolvedValue(null);
@@ -91,11 +91,17 @@ describe('POST /api/tenants — 创建租户', () => {
     });
 
     mockPrisma.$transaction.mockImplementation(async (fn: any) => {
-      return fn({
-        tenant: { create: vi.fn().mockResolvedValue(mockTenant) },
-        user: { create: vi.fn().mockResolvedValue(mockAdmin) },
-      });
+      const tx = {
+        ...mockPrisma,
+        tenant: { ...mockPrisma.tenant, create: vi.fn().mockResolvedValue(mockTenant) },
+        user: { ...mockPrisma.user, findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue(mockAdmin) },
+        userTenant: { ...mockPrisma.userTenant, create: vi.fn().mockResolvedValue({ id: 'ut-new', status: 'invited', role: 'owner' }) },
+      };
+      return fn(tx);
     });
+
+    // Mock individual db calls made outside transaction
+    mockPrisma.tenant.findUnique.mockResolvedValue(null);
 
     const { POST } = await import('@/app/api/tenants/route');
 
@@ -122,7 +128,7 @@ describe('POST /api/tenants — 创建租户', () => {
   });
 
   it('非主租户管理员创建租户 → 返回 403', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const { POST } = await import('@/app/api/tenants/route');
 
@@ -151,15 +157,12 @@ describe('POST /api/tenants — 创建租户', () => {
 // 软删除租户 DELETE /api/tenants/:id
 // ============================================================
 describe('DELETE /api/tenants/:id — 软删除租户', () => {
-  it('软删除租户 → status 变为 deleted（TC-022 相关）', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+  it('硬删除租户 → 成功（TC-022 相关）', async () => {
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     const existingTenant = createTestTenant({ id: 'tenant-to-delete' });
     mockPrisma.tenant.findUnique.mockResolvedValue(existingTenant);
-    mockPrisma.tenant.update.mockResolvedValue({
-      ...existingTenant,
-      status: 'deleted',
-    });
+    mockPrisma.tenant.delete.mockResolvedValue(existingTenant);
 
     const { DELETE } = await import('@/app/api/tenants/[id]/route');
 
@@ -172,15 +175,14 @@ describe('DELETE /api/tenants/:id — 软删除租户', () => {
 
     expect(response.status).toBe(204);
 
-    // 验证调用了 update 将 status 设为 deleted
-    expect(mockPrisma.tenant.update).toHaveBeenCalledWith({
+    // 验证调用了 delete 进行硬删除
+    expect(mockPrisma.tenant.delete).toHaveBeenCalledWith({
       where: { id: 'tenant-to-delete' },
-      data: { status: 'deleted' },
     });
   });
 
   it('非全局管理员删除租户 → 返回 403', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const { DELETE } = await import('@/app/api/tenants/[id]/route');
 
@@ -197,7 +199,7 @@ describe('DELETE /api/tenants/:id — 软删除租户', () => {
   });
 
   it('删除不存在的租户 → 返回 404', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     mockPrisma.tenant.findUnique.mockResolvedValue(null);
 
@@ -221,17 +223,17 @@ describe('DELETE /api/tenants/:id — 软删除租户', () => {
 // ============================================================
 describe('用户配额限制（TC-027）', () => {
   it('用户数达到上限 → 阻止创建新用户', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     // 用户已存在检查通过（不重复）
-    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.user.findUnique.mockResolvedValue(null);
 
     // 租户配额为 5
-    const tenant = createTestTenant({ id: 'tenant-001', quotaUsers: 5 });
+    const tenant = createTestTenant({ id: 'tenant-001', maxUsers: 5 });
     mockPrisma.tenant.findUnique.mockResolvedValue(tenant);
 
     // 当前已有 5 个用户
-    mockPrisma.user.count.mockResolvedValue(5);
+    mockPrisma.userTenant.count.mockResolvedValue(5);
 
     const { POST } = await import('@/app/api/users/route');
 
@@ -256,22 +258,29 @@ describe('用户配额限制（TC-027）', () => {
   });
 
   it('用户数未达上限 → 允许创建新用户', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    mockPrisma.user.findFirst.mockResolvedValue(null);
+    mockPrisma.user.findUnique.mockResolvedValue(null);
 
-    const tenant = createTestTenant({ id: 'tenant-001', quotaUsers: 100 });
+    const tenant = createTestTenant({ id: 'tenant-001', maxUsers: 100 });
     mockPrisma.tenant.findUnique.mockResolvedValue(tenant);
 
     // 当前只有 3 个用户
-    mockPrisma.user.count.mockResolvedValue(3);
+    mockPrisma.userTenant.count.mockResolvedValue(3);
 
     const newUser = createTestUser({
       id: 'new-user',
       email: 'newuser@test.com',
       name: '新用户',
     });
-    mockPrisma.user.create.mockResolvedValue(newUser);
+    mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+      const tx = {
+        ...mockPrisma,
+        user: { ...mockPrisma.user, findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue(newUser) },
+        userTenant: { ...mockPrisma.userTenant, create: vi.fn().mockResolvedValue({ id: 'ut-new', role: 'member', status: 'active' }) },
+      };
+      return fn(tx);
+    });
 
     const { POST } = await import('@/app/api/users/route');
 

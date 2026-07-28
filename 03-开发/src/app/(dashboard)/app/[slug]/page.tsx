@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -13,6 +13,18 @@ interface AppInfo {
   type: string;
 }
 
+interface AppTokenData {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    tenantId: string;
+  };
+  permissions: string[];
+  config: Record<string, string>;
+}
+
 export default function AppViewPage() {
   const params = useParams();
   const router = useRouter();
@@ -22,13 +34,126 @@ export default function AppViewPage() {
   const [error, setError] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const entryRef = useRef<string>("/");
+  const tokenCache = useRef<AppTokenData | null>(null);
 
-  // 记录进入应用前的页面（用于 × 关闭按钮）
   useEffect(() => {
     if (typeof window !== "undefined") {
       entryRef.current = document.referrer || "/";
     }
   }, []);
+
+  // 获取应用 Token（带缓存）
+  const fetchAppToken = useCallback(
+    async (appId: string): Promise<AppTokenData | null> => {
+      if (tokenCache.current) return tokenCache.current;
+      try {
+        const res = await api.get<{ success: boolean; data: AppTokenData }>(
+          `/api/apps/${appId}/token`
+        );
+        tokenCache.current = res.data;
+        return res.data;
+      } catch {
+        return null;
+      }
+    },
+    []
+  );
+
+  // 计算 iframe 目标源（安全：限定 postMessage 目标）
+  const targetOrigin = app?.url?.startsWith("/")
+    ? window.location.origin
+    : app?.url
+    ? new URL(app.url).origin
+    : "*";
+
+  // 监听 iframe 的 postMessage 请求
+  useEffect(() => {
+    if (!app) return;
+
+    async function handleMessage(event: MessageEvent) {
+      const iframe = iframeRef.current;
+      if (!iframe || !iframe.contentWindow) return;
+
+      // 安全检查：消息必须来自 iframe
+      // 注意：event.source 在 sandbox 模式下可能为 null
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+
+      switch (data.type) {
+        case "hubforge:ready": {
+          // 应用已加载，请求认证信息
+          const tokenData = await fetchAppToken(app!.id);
+          if (tokenData) {
+            iframe.contentWindow.postMessage(
+              {
+                type: "hubforge:auth",
+                token: tokenData.token,
+                user: tokenData.user,
+                permissions: tokenData.permissions,
+                config: tokenData.config,
+                appSlug: app!.slug,
+              },
+              targetOrigin
+            );
+          } else {
+            iframe.contentWindow.postMessage(
+              {
+                type: "hubforge:auth-error",
+                error: "获取认证信息失败",
+              },
+              targetOrigin
+            );
+          }
+          break;
+        }
+
+        case "hubforge:request-auth": {
+          // 应用重新请求认证（Token 可能过期）
+          tokenCache.current = null; // 清除缓存
+          const freshToken = await fetchAppToken(app!.id);
+          if (freshToken && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(
+              {
+                type: "hubforge:auth",
+                token: freshToken.token,
+                user: freshToken.user,
+                permissions: freshToken.permissions,
+                config: freshToken.config,
+                appSlug: app!.slug,
+              },
+              targetOrigin
+            );
+          }
+          break;
+        }
+
+        case "hubforge:navigate": {
+          // 应用请求页面跳转
+          if (data.url && typeof data.url === "string") {
+            router.push(data.url);
+          }
+          break;
+        }
+
+        case "hubforge:close": {
+          // 应用请求关闭
+          router.push("/");
+          break;
+        }
+
+        case "hubforge:resize": {
+          // 应用请求调整 iframe 高度
+          if (data.height && typeof data.height === "number") {
+            iframe.style.height = `${data.height}px`;
+          }
+          break;
+        }
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [app, fetchAppToken, router]);
 
   useEffect(() => {
     async function fetchApp() {
@@ -63,14 +188,8 @@ export default function AppViewPage() {
     };
   }, []);
 
-  const handleBack = () => {
-    router.back();
-  };
-
-  const handleClose = () => {
-    // 关闭应用，退出到进入前的页面
-    router.push("/");
-  };
+  const handleBack = () => router.back();
+  const handleClose = () => router.push("/");
 
   if (loading) {
     return (
@@ -108,7 +227,6 @@ export default function AppViewPage() {
     <div className="flex flex-col h-full">
       {/* H5 顶部栏 - 仅移动端显示 */}
       <div className="lg:hidden flex items-center h-12 px-3 bg-white border-b border-gray-200 shrink-0">
-        {/* ‹ 返回上一步 */}
         <button
           onClick={handleBack}
           className="w-10 h-10 flex items-center justify-center text-[#333] hover:text-[#1a1a2e] transition-colors"
@@ -119,13 +237,11 @@ export default function AppViewPage() {
           </svg>
         </button>
 
-        {/* Logo + 应用名 */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <img src="/logo.png" alt="华检科" className="w-5 h-5 rounded object-cover shrink-0" />
           <span className="text-sm font-semibold text-[#333] truncate">{app.name}</span>
         </div>
 
-        {/* × 关闭应用 */}
         <button
           onClick={handleClose}
           className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-[#e94560] transition-colors"

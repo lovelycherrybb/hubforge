@@ -36,14 +36,16 @@ export async function GET(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const departments = await db.department.findMany({
         where: { tenantId: payload.tenantId },
         include: {
-          _count: { select: { users: true } },
+          _count: { select: { userOrgs: true } },
         },
         orderBy: { sortOrder: "asc" },
       });
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
         name: d.name,
         parentId: d.parentId,
         sortOrder: d.sortOrder,
-        userCount: d._count.users,
+        userCount: d._count.userOrgs,
         children: [] as DepartmentNode[],
       }));
 

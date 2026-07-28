@@ -43,8 +43,13 @@ export const mockPrisma = {
   permission: createMockModel(),
   userPermission: createMockModel(),
   departmentPermission: createMockModel(),
+  tenantPermission: createMockModel(),
   app: createMockModel(),
   appConfig: createMockModel(),
+  tenantApp: createMockModel(),
+  tenantAppConfig: createMockModel(),
+  userTenant: createMockModel(),
+  userOrganization: createMockModel(),
   verificationCode: createMockModel(),
   // 事务和原生 SQL
   $transaction: vi.fn(),
@@ -107,6 +112,7 @@ vi.mock('@/lib/auth', async () => {
 
   return {
     COOKIE_NAME,
+    isAdmin: (payload: any) => payload?.role === 'owner' || payload?.role === 'admin',
     signToken: async (payload: any) => {
       return new SignJWT(payload as any)
         .setProtectedHeader({ alg: 'HS256' })
@@ -163,18 +169,8 @@ export function createTestUser(overrides: Record<string, any> = {}) {
     id: 'user-test-001',
     email: 'test@example.com',
     name: '测试用户',
-    passwordHash: '$2b$12$hashedpasswordplaceholder',
-    status: 'active',
-    tenantId: 'tenant-test-001',
-    departmentId: null,
-    isGlobalAdmin: false,
-    failedLoginAttempts: 0,
-    lockedUntil: null,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
-    tenant: createTestTenant(),
-    department: null,
-    grantedPermissions: [],
     ...overrides,
   };
 }
@@ -189,9 +185,9 @@ export function createTestTenant(overrides: Record<string, any> = {}) {
     name: '测试租户',
     slug: 'test-tenant',
     status: 'active',
-    quotaUsers: 100,
-    quotaApps: 50,
-    quotaOrgLevels: 5,
+    maxUsers: 100,
+    maxApps: 50,
+    maxOrgLevels: 5,
     createdAt: new Date('2026-01-01'),
     updatedAt: new Date('2026-01-01'),
     ...overrides,
@@ -202,13 +198,16 @@ export function createTestTenant(overrides: Record<string, any> = {}) {
  * 生成测试用 JWT（同步签名，使用 jose）
  * @param userId - 用户 ID
  * @param tenantId - 租户 ID
- * @param isGlobalAdmin - 是否全局管理员
+ * @param isGlobalAdmin - 是否全局管理员（同时映射为 role='owner'）
  */
 export async function createAuthToken(
   userId = 'user-test-001',
   tenantId = 'tenant-test-001',
-  isGlobalAdmin = false
+  roleOrAdmin: 'owner' | 'admin' | 'member' | boolean = 'member'
 ): Promise<string> {
+  const role = typeof roleOrAdmin === 'boolean'
+    ? (roleOrAdmin ? 'owner' : 'member')
+    : roleOrAdmin;
   const { SignJWT } = await import('jose');
   const secret = new TextEncoder().encode(
     process.env.JWT_SECRET || 'fallback-secret-do-not-use-in-production'
@@ -217,7 +216,7 @@ export async function createAuthToken(
     userId,
     tenantId,
     email: 'test@example.com',
-    isGlobalAdmin,
+    role,
   } as any)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()

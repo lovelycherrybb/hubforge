@@ -1,7 +1,7 @@
 // ============================================================
 // GET /api/tenants      — 租户列表
 // POST /api/tenants     — 创建租户（自动生成管理员账号）
-// 权限要求：全局管理员
+// 权限要求：owner 角色（平台管理员）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -19,18 +19,18 @@ const createTenantSchema = z.object({
     .min(2)
     .max(50)
     .regex(/^[a-z0-9-]+$/),
-  quotaUsers: z.number().int().min(1).default(100),
-  quotaApps: z.number().int().min(1).default(50),
-  quotaOrgLevels: z.number().int().min(1).default(5),
+  maxUsers: z.number().int().min(1).default(100),
+  maxApps: z.number().int().min(1).default(50),
+  maxOrgLevels: z.number().int().min(1).default(5),
   adminEmail: z.string().email("管理员邮箱格式不正确"),
   adminName: z.string().min(1).max(50).default("管理员"),
 });
 
-/** 验证全局管理员身份 */
+/** 验证平台管理员身份（owner 角色） */
 async function requireGlobalAdmin(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return { error: unauthorized() };
-  if (!payload.isGlobalAdmin) return { error: forbidden("仅限平台管理员") };
+  if (payload.role !== "owner") return { error: forbidden("仅限平台管理员") };
   return { payload };
 }
 
@@ -65,13 +65,12 @@ export async function GET(request: NextRequest) {
 
   const [tenants, total] = await Promise.all([
     db.tenant.findMany({
-      where: { status: { not: "deleted" } },
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { users: true, tenantApps: true } } },
     }),
-    db.tenant.count({ where: { status: { not: "deleted" } } }),
+    db.tenant.count(),
   ]);
 
   return paginated(tenants, total, page, pageSize);
@@ -84,16 +83,12 @@ export async function POST(request: NextRequest) {
   const parsed = await parseBody(request, createTenantSchema);
   if (!parsed.success) return error(parsed.error);
 
-  const { name, slug, quotaUsers, quotaApps, quotaOrgLevels, adminEmail, adminName } =
+  const { name, slug, maxUsers, maxApps, maxOrgLevels, adminEmail, adminName } =
     parsed.data;
 
   // 检查 slug 唯一性
   const existing = await db.tenant.findUnique({ where: { slug } });
   if (existing) return error("该租户标识已被占用");
-
-  // 检查管理员邮箱唯一性
-  const existingUser = await db.user.findFirst({ where: { email: adminEmail } });
-  if (existingUser) return error("该管理员邮箱已被使用");
 
   const tempPassword = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 12);
@@ -104,20 +99,32 @@ export async function POST(request: NextRequest) {
       data: {
         name,
         slug,
-        quotaUsers,
-        quotaApps,
-        quotaOrgLevels,
+        maxUsers,
+        maxApps,
+        maxOrgLevels,
         status: "active",
+        createdById: auth.payload.userId,
       },
     });
 
-    const admin = await tx.user.create({
+    // 创建或复用全局用户
+    let admin = await tx.user.findUnique({ where: { email: adminEmail } });
+    if (!admin) {
+      admin = await tx.user.create({
+        data: {
+          email: adminEmail,
+          name: adminName,
+        },
+      });
+    }
+
+    // 创建用户-租户关系（owner 角色）
+    await tx.userTenant.create({
       data: {
-        email: adminEmail,
-        passwordHash,
-        name: adminName,
+        userId: admin.id,
         tenantId: tenant.id,
-        isGlobalAdmin: false, // 租户管理员，非平台管理员
+        passwordHash,
+        role: "owner",
         status: "invited",
       },
     });
@@ -132,7 +139,6 @@ export async function POST(request: NextRequest) {
         id: result.admin.id,
         email: result.admin.email,
         name: result.admin.name,
-        status: result.admin.status,
         tempPassword, // 管理员首次登录后应修改密码
       },
     },

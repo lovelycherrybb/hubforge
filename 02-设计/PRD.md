@@ -27,7 +27,7 @@ vibecoding（AI辅助编程）浪潮下，传统企业业务人员能用 Cursor/
 
 **V1.0 包含:**
 - 多租户管理（租户创建、配置、数据隔离、主租户全局管控）
-- 统一用户/组织管理（注册、登录、密码找回、组织架构 CRUD）
+- 统一用户/组织管理（登录、密码找回、组织架构 CRUD）— **仅邀请制，不支持自注册**
 - 两层权限体系（框架权限 + 应用权限）
 - 应用管理（应用注册、iframe 嵌入）
 - PC Web 端门户（顶部栏 + 首页 + 应用视图）
@@ -129,21 +129,24 @@ vibecoding（AI辅助编程）浪潮下，传统企业业务人员能用 Cursor/
 
 #### M1: 用户与认证
 
-**功能描述**: 统一的用户注册、登录、登出、密码找回系统。
+**功能描述**: 统一的用户登录、登出、密码找回系统。**V1 仅支持邀请制，不支持自注册。**
 
 **认证方案**: JWT token 存储在 httpOnly Cookie 中（同域部署天然共享，iframe 内子应用自动携带，无需额外传 token）。
 
 **功能流程**:
 1. 用户访问 HubForge 域名 → 未登录则跳转登录页
-2. 输入邮箱+密码 → 后端验证
+2. 输入邮箱 → 查询 user_tenants 获取所属租户列表
 3. **多租户检测**：
-   - 查询用户所属租户列表
-   - 如果只有 1 个租户 → 直接签发 JWT，进入该租户
-   - 如果有多个租户 → 跳转租户选择页
-4. 签发 JWT → 写入 httpOnly Cookie（含 `tenant_id`）
-5. 后续请求自动携带 Cookie → 中间件校验
-6. Cookie 过期 → 自动刷新（滑动过期 24h）
-7. iframe 内子应用同域，自动共享 Cookie，无需额外处理
+   - 如果 0 个租户 → 提示"该邮箱未被任何租户邀请"
+   - 如果 1 个租户 → 直接进入密码输入页
+   - 如果多个租户 → 跳转租户选择页
+4. 用户选择租户（或单租户自动选择）→ 进入密码输入页
+5. 输入密码 → 查询 user_tenants 验证该租户下的密码
+6. 密码正确 → 签发 JWT（含 tenant_id）→ 写入 httpOnly Cookie
+7. 密码错误 → 提示"密码错误"（不透露其他租户信息）
+8. 后续请求自动携带 Cookie → 中间件校验
+9. Cookie 过期 → 自动刷新（滑动过期 24h）
+10. iframe 内子应用同域，自动共享 Cookie，无需额外处理
 
 **租户选择器设计**:
 
@@ -165,35 +168,42 @@ vibecoding（AI辅助编程）浪潮下，传统企业业务人员能用 Cursor/
 - 顶部栏显示当前租户名称，点击可切换
 
 **忘记密码流程**:
-1. 用户点击"忘记密码" → 输入注册邮箱
-2. 系统发送验证码邮件（6 位数字，15 分钟有效）
-3. 用户输入验证码 → 设置新密码
-4. 旧 Cookie 失效 → 重新登录
+1. 用户在登录页点击"忘记密码"
+2. 输入邮箱 → 系统检测所属租户列表
+3. 如果多个租户 → 先选择要重置密码的租户
+4. 系统发送验证码邮件（6 位数字，15 分钟有效）
+5. 用户输入验证码 → 设置新密码
+6. 新密码存入 user_tenants.password_hash（仅重置该租户下的密码）
+7. 旧 Cookie 失效 → 重新登录
 
 **租户管理员邀请流程**:
 1. 主租户创建租户 → 填写管理员邮箱
-2. 系统自动生成临时密码 → 发送激活邮件
-3. 管理员首次登录 → 强制修改密码
-4. 管理员进入租户管理后台
+2. 系统检查 users 表：
+   - 如果邮箱已存在 → 直接在 user_tenants 添加记录（role=admin）
+   - 如果邮箱不存在 → 创建 users 记录 + user_tenants 记录
+3. 发送邀请邮件 → 用户点击链接设置密码（该租户独立密码）
+4. 管理员首次登录 → 进入租户管理后台
 
 **验收标准**:
-- [ ] 支持邮箱+密码注册和登录
+- [ ] 支持邮箱→选租户→密码的两步登录流程
 - [ ] JWT 存 httpOnly Cookie，有效期 24h（滑动刷新）
 - [ ] 多租户用户登录后显示租户选择器
-- [ ] 单租户用户登录后直接进入
-- [ ] 记住我的选择功能（30天有效）
-- [ ] 顶部栏显示当前租户，可切换
-- [ ] 忘记密码：邮箱验证码重置，15 分钟有效
+- [ ] 单租户用户登录后直接进入密码页
+- [ ] 记住我的选择功能（30天有效），失效时自动清除
+- [ ] 顶部栏显示当前租户，可切换（切换后跳首页）
+- [ ] 忘记密码：先选租户，再重置该租户下的密码
 - [ ] 登出后 Cookie 清除
-- [ ] 错误密码 5 次后锁定 15 分钟
-- [ ] 租户创建时自动发送管理员激活邮件
+- [ ] 错误密码 5 次后锁定该租户 15 分钟（不影响其他租户）
+- [ ] 租户管理员可邀请用户（输入邮箱+角色）
+- [ ] 被邀请用户收到邮件后设置密码
+- [ ] 未被邀请的邮箱无法登录（提示"该邮箱未被任何租户邀请"）
 - [ ] iframe 内子应用自动共享认证状态（同域 Cookie）
 
 ---
 
 #### M2: 多租户
 
-**功能描述**: 支持多个租户（组织/部门），每个租户有独立的用户池和数据域。主租户拥有全局管控能力。
+**功能描述**: 支持多个租户（组织/部门），每个租户有独立的数据域。用户通过 user_tenants 表关联到多个租户。主租户拥有全局管控能力。
 
 **主租户管理后台（主租户专属）**:
 
@@ -677,9 +687,169 @@ iframe加载应用（自动携带Cookie认证）
 
 ---
 
-## 9. 风险与依赖
+## 9. 数据模型
 
-### 9.1 风险
+### 9.1 核心表结构
+
+**设计原则**：全局用户身份 + 租户自治密码（一个邮箱可在多个租户存在，每个租户独立管理密码）
+
+```
+users（全局用户表 — 仅存身份信息，不含密码）
+├── id: UUID (PK)
+├── email: VARCHAR(255) (UNIQUE)
+├── name: VARCHAR(100)
+├── avatar_url: VARCHAR(500)
+├── email_verified: BOOLEAN (DEFAULT false)
+├── created_at: TIMESTAMP
+└── updated_at: TIMESTAMP
+
+tenants（租户表）
+├── id: UUID (PK)
+├── name: VARCHAR(100)
+├── slug: VARCHAR(50) (UNIQUE, 用于 URL)
+├── logo_url: VARCHAR(500)
+├── max_users: INT (DEFAULT 100)
+├── max_apps: INT (DEFAULT 20)
+├── max_org_levels: INT (DEFAULT 8)
+├── status: ENUM('active', 'suspended')
+├── created_by: UUID (FK → users.id)
+├── created_at: TIMESTAMP
+└── updated_at: TIMESTAMP
+
+user_tenants（用户-租户关系表 — 含租户独立密码）
+├── user_id: UUID (FK → users.id)
+├── tenant_id: UUID (FK → tenants.id)
+├── password_hash: VARCHAR(255) (每个租户独立密码)
+├── role: ENUM('owner', 'admin', 'member')
+├── status: ENUM('active', 'invited', 'suspended')
+├── password_updated_at: TIMESTAMP
+├── joined_at: TIMESTAMP
+└── UNIQUE(user_id, tenant_id)
+
+organizations（组织架构表）
+├── id: UUID (PK)
+├── tenant_id: UUID (FK → tenants.id)
+├── parent_id: UUID (FK → organizations.id, NULLABLE)
+├── name: VARCHAR(100)
+├── sort_order: INT
+├── created_at: TIMESTAMP
+└── updated_at: TIMESTAMP
+
+user_organizations（用户-组织关系表）
+├── user_id: UUID (FK → users.id)
+├── organization_id: UUID (FK → organizations.id)
+├── is_primary: BOOLEAN (DEFAULT true)
+└── UNIQUE(user_id, organization_id)
+
+applications（应用注册表）
+├── id: UUID (PK)
+├── tenant_id: UUID (FK → tenants.id)
+├── name: VARCHAR(100)
+├── slug: VARCHAR(50)
+├── description: TEXT
+├── icon_url: VARCHAR(500)
+├── url: VARCHAR(500) (iframe 嵌入地址)
+├── type: ENUM('pc', 'h5', 'both')
+├── config: JSONB (hubforge.config.json 内容)
+├── status: ENUM('active', 'inactive')
+├── created_by: UUID (FK → users.id)
+├── created_at: TIMESTAMP
+├── updated_at: TIMESTAMP
+└── UNIQUE(tenant_id, slug) (同一租户下 slug 唯一)
+
+permissions（权限表）
+├── id: UUID (PK)
+├── key: VARCHAR(100) (UNIQUE)
+├── label: VARCHAR(100)
+├── type: ENUM('framework', 'app')
+├── app_id: UUID (FK → applications.id, NULLABLE)
+├── created_at: TIMESTAMP
+
+user_permissions（用户权限关系表）
+├── user_id: UUID (FK → users.id)
+├── tenant_id: UUID (FK → tenants.id)
+├── permission_id: UUID (FK → permissions.id)
+├── granted_by: UUID (FK → users.id)
+├── granted_at: TIMESTAMP
+└── UNIQUE(user_id, tenant_id, permission_id)
+
+organization_permissions（组织权限关系表）
+├── organization_id: UUID (FK → organizations.id)
+├── permission_id: UUID (FK → permissions.id)
+├── granted_by: UUID (FK → users.id)
+└── granted_at: TIMESTAMP
+```
+
+### 9.2 RLS 策略
+
+```sql
+-- 租户数据隔离：所有业务表必须包含 tenant_id
+-- RLS 策略示例
+CREATE POLICY tenant_isolation ON applications
+  USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+
+-- users 表不需要 RLS（全局用户池，登录时按 email 查询）
+-- user_tenants 表访问控制：
+--   - 登录页：按 email 查询（无 RLS），返回用户所属的所有租户
+--   - 登录后：按 tenant_id 过滤（有 RLS），只返回当前租户的成员
+```
+
+**user_tenants 访问控制细节**:
+| 场景 | 查询方式 | RLS |
+|------|---------|-----|
+| 登录页查租户列表 | WHERE email = ? | 关闭（需要看到所有租户） |
+| 登录后查当前租户成员 | WHERE tenant_id = ? | 开启（只看到当前租户） |
+| 管理后台查成员列表 | WHERE tenant_id = ? | 开启（只看到当前租户） |
+
+### 9.3 关键设计决策
+
+| 决策 | 选择 | 理由 |
+|------|------|------|
+| 用户模型 | 全局用户身份 + 租户自治密码 | 租户独立管控账号安全，符合企业合规要求 |
+| 密码存储 | 存在 user_tenants 表 | 每个租户独立管理密码，互不影响 |
+| 租户隔离 | PostgreSQL RLS | 数据库层面强制隔离，安全性高 |
+| 权限继承 | 取并集，只做加法 | 简单易理解，V1 不支持拒绝 |
+| 用户-组织 | V1 一个用户一个主部门 | 简化实现，V1.1 支持兼任 |
+| 应用嵌入 | iframe | 零侵入，应用无需改造 |
+
+### 9.4 数据流示例
+
+**登录流程（多租户场景）**:
+```
+1. 用户输入 email
+2. 查询 user_tenants 获取用户所属租户列表
+3. 如果 0 个租户 → 提示"该邮箱未被任何租户邀请"
+4. 如果 1 个租户 → 直接进入密码输入页
+5. 如果多个租户 → 显示租户选择器
+6. 用户选择租户 → 进入密码输入页
+7. 输入密码 → 查询 user_tenants 验证该租户下的密码
+8. 密码正确 → 签发 JWT（含 tenant_id）
+9. 密码错误 → 提示"密码错误"（不透露其他租户信息）
+```
+
+**注册流程（新用户被邀请）**:
+```
+1. 主租户管理员创建用户 → 输入邮箱、选择角色
+2. 系统检查 users 表：
+   - 如果邮箱已存在 → 直接在 user_tenants 添加记录
+   - 如果邮箱不存在 → 创建 users 记录 + user_tenants 记录
+3. 发送邀请邮件 → 用户点击链接设置密码
+4. 密码存入 user_tenants.password_hash（该租户独立密码）
+```
+
+**数据访问流程**:
+```
+1. 请求到达 → 中间件从 Cookie 读取 current_tenant_id
+2. 设置 PostgreSQL session: SET app.current_tenant_id = 'xxx'
+3. 所有后续查询自动被 RLS 过滤
+4. 只返回当前租户的数据
+```
+
+---
+
+## 10. 风险与依赖
+
+### 10.1 风险
 
 | 风险 | 影响 | 可能性 | 应对措施 |
 |------|------|--------|----------|
@@ -689,7 +859,7 @@ iframe加载应用（自动携带Cookie认证）
 | 多租户数据泄露 | 安全事故 | 低 | RLS + 中间件 + 安全审计 |
 | Prisma 与 RLS 配合 | 实现复杂度 | 中 | tenantMiddleware + 每表加 tenant_id 索引 |
 
-### 9.2 依赖
+### 10.2 依赖
 
 | 依赖项 | 说明 | 状态 |
 |--------|------|------|

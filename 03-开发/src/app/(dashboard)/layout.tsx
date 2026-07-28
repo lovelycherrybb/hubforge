@@ -38,9 +38,6 @@ export default function DashboardLayout({
   }
 
   const isInApp = pathname.startsWith("/app/");
-  const isTenantAdmin = user.isGlobalAdmin || user.permissions?.some(
-    (p: { key?: string }) => p?.key === "tenant.admin"
-  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -50,8 +47,7 @@ export default function DashboardLayout({
           user={{
             email: user.email,
             name: user.name,
-            isGlobalAdmin: user.isGlobalAdmin,
-            isTenantAdmin,
+            role: user.role,
             tenant: user.tenant,
           }}
         />

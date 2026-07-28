@@ -1,7 +1,7 @@
 // ============================================================
 // PUT /api/tenants/:id/status
 // 停用/启用租户
-// 权限要求：全局管理员
+// 权限要求：owner 角色（平台管理员）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -21,13 +21,13 @@ export async function PUT(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限平台管理员");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
   const parsed = await parseBody(request, updateStatusSchema);
   if (!parsed.success) return error(parsed.error);
 
   const tenant = await db.tenant.findUnique({ where: { id: params.id } });
-  if (!tenant || tenant.status === "deleted") return notFound("租户不存在");
+  if (!tenant) return notFound("租户不存在");
 
   const updated = await db.tenant.update({
     where: { id: params.id },

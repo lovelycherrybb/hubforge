@@ -1,5 +1,5 @@
 // PUT /api/tenants/[id]/users/[userId] — 更新用户（设置/取消管理员）
-// 权限要求：主租户管理员
+// 权限要求：owner 角色（平台管理员）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -10,9 +10,9 @@ import { parseBody } from "@/lib/validate";
 import { success, error, forbidden, unauthorized, notFound } from "@/lib/api-response";
 
 const updateUserSchema = z.object({
-  isGlobalAdmin: z.boolean().optional(),
+  role: z.enum(["admin", "member"]).optional(),
   name: z.string().min(1).max(100).optional(),
-  status: z.enum(["active", "locked"]).optional(),
+  status: z.enum(["active", "suspended"]).optional(),
 });
 
 export async function PUT(
@@ -21,28 +21,55 @@ export async function PUT(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限主租户");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
-  const user = await db.user.findFirst({
-    where: { id: params.userId, tenantId: params.id },
+  // 查找用户在该租户的 UserTenant 记录
+  const userTenant = await db.userTenant.findUnique({
+    where: {
+      userId_tenantId: { userId: params.userId, tenantId: params.id },
+    },
   });
-  if (!user) return notFound("用户不存在");
+  if (!userTenant) return notFound("用户不存在");
 
   const parsed = await parseBody(request, updateUserSchema);
   if (!parsed.success) return error(parsed.error);
 
-  const updated = await db.user.update({
+  const { role, name, status } = parsed.data;
+
+  // 更新 UserTenant（角色、状态）
+  const userTenantData: Record<string, unknown> = {};
+  if (role) userTenantData.role = role;
+  if (status) userTenantData.status = status;
+
+  if (Object.keys(userTenantData).length > 0) {
+    await db.userTenant.update({
+      where: { id: userTenant.id },
+      data: userTenantData,
+    });
+  }
+
+  // 更新 User 全局信息（姓名）
+  if (name) {
+    await db.user.update({
+      where: { id: params.userId },
+      data: { name },
+    });
+  }
+
+  // 返回更新后的信息
+  const updatedUser = await db.user.findUnique({
     where: { id: params.userId },
-    data: parsed.data,
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      status: true,
-      isGlobalAdmin: true,
-      department: { select: { id: true, name: true } },
-    },
+    select: { id: true, email: true, name: true },
   });
 
-  return success(updated);
+  const updatedUserTenant = await db.userTenant.findUnique({
+    where: { id: userTenant.id },
+    select: { role: true, status: true },
+  });
+
+  return success({
+    ...updatedUser,
+    role: updatedUserTenant?.role,
+    status: updatedUserTenant?.status,
+  });
 }

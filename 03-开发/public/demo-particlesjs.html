@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>particles.js — HubForge 登录页 Demo</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { display: flex; height: 100vh; font-family: 'Inter', -apple-system, sans-serif; overflow: hidden; background: #0d0d1a; }
+.left { width: 40%; height: 100vh; position: relative; background: #1a1a2e; }
+#particles-js { position: absolute; inset: 0; }
+.brand { position: absolute; top: 40px; left: 40px; z-index: 10; }
+.brand h1 { color: white; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+.brand p { color: rgba(255,255,255,0.35); font-size: 11px; margin-top: 4px; }
+.tag { position: absolute; bottom: 40px; left: 40px; z-index: 10; color: rgba(255,255,255,0.25); font-size: 11px; }
+.right { flex: 1; display: flex; align-items: center; justify-content: center; background: #fafafa; }
+.form { width: 300px; }
+.form h2 { font-size: 22px; font-weight: 700; color: #222; margin-bottom: 28px; }
+.form label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+.form input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; margin-bottom: 16px; }
+.form input:focus { border-color: #1a1a2e; box-shadow: 0 0 0 3px rgba(26,26,46,0.08); }
+.form .forgot { text-align: right; margin: -8px 0 20px; }
+.form .forgot a { font-size: 12px; color: #999; text-decoration: none; }
+.form button { width: 100%; padding: 11px; background: #1a1a2e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.form .reg { margin-top: 20px; text-align: center; font-size: 13px; color: #999; }
+.form .reg a { color: #1a1a2e; font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="left">
+  <div id="particles-js"></div>
+  <div class="brand">
+    <h1>华检科 HubForge</h1>
+    <p>AI 重塑咨询解决方案</p>
+  </div>
+  <div class="tag">particles.js 粒子网络</div>
+</div>
+<div class="right">
+  <div class="form">
+    <h2>登录</h2>
+    <label>邮箱</label>
+    <input type="text" placeholder="you@company.com" />
+    <label>密码</label>
+    <input type="password" placeholder="输入你的密码" />
+    <div class="forgot"><a href="#">忘记密码？</a></div>
+    <button>登 录</button>
+    <p class="reg">还没有账号？<a href="#">注册</a></p>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+<script>
+particlesJS("particles-js", {
+  particles: {
+    number: { value: 70, density: { enable: true, value_area: 800 } },
+    color: { value: ["#ffffff", "#66b3ff", "#3399ff"] },
+    shape: { type: "circle" },
+    opacity: { value: 0.7, random: true, anim: { enable: true, speed: 0.8, opacity_min: 0.3, sync: false } },
+    size: { value: 2.5, random: true, anim: { enable: true, speed: 1.5, size_min: 0.5, sync: false } },
+    line_linked: { enable: true, distance: 150, color: "#66b3ff", opacity: 0.2, width: 1 },
+    move: { enable: true, speed: 0.8, direction: "none", random: false, straight: false, out_mode: "out", bounce: false }
+  },
+  interactivity: {
+    detect_on: "canvas",
+    events: {
+      onhover: { enable: true, mode: "grab" },
+      onclick: { enable: false },
+      resize: true
+    },
+    modes: {
+      grab: { distance: 180, line_linked: { opacity: 0.5 } }
+    }
+  },
+  retina_detect: true
+});
+</script>
+</body>
+</html>

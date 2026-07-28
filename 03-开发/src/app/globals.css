@@ -33,3 +33,32 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 粒子背景漂浮图标动画 */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-12px) translateX(6px); }
+  50% { transform: translateY(-6px) translateX(-4px); }
+  75% { transform: translateY(-18px) translateX(8px); }
+}
+@keyframes float-slow-reverse {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(10px) translateX(-8px); }
+  50% { transform: translateY(6px) translateX(5px); }
+  75% { transform: translateY(16px) translateX(-6px); }
+}
+@keyframes float-medium {
+  0%, 100% { transform: translateY(0) translateX(0) rotate(0deg); }
+  33% { transform: translateY(-15px) translateX(10px) rotate(2deg); }
+  66% { transform: translateY(-8px) translateX(-6px) rotate(-1deg); }
+}
+@keyframes float-medium-reverse {
+  0%, 100% { transform: translateY(0) translateX(0) rotate(0deg); }
+  33% { transform: translateY(12px) translateX(-8px) rotate(-2deg); }
+  66% { transform: translateY(6px) translateX(10px) rotate(1deg); }
+}
+
+.animate-float-slow { animation: float-slow 20s ease-in-out infinite; }
+.animate-float-slow-reverse { animation: float-slow-reverse 25s ease-in-out infinite; }
+.animate-float-medium { animation: float-medium 16s ease-in-out infinite; }
+.animate-float-medium-reverse { animation: float-medium-reverse 18s ease-in-out infinite; }

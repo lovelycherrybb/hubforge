@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>tsparticles Canvas2D Demo</title>
+<style>
+* { margin: 0; padding: 0; }
+body { background: #0a0a14; display: flex; height: 100vh; font-family: sans-serif; overflow: hidden; }
+.panel { width: 40%; height: 100vh; position: relative; }
+#tsparticles { position: absolute; inset: 0; }
+.right { flex: 1; display: flex; align-items: center; justify-content: center; background: #fafafa; }
+.brand { position: absolute; top: 40px; left: 40px; z-index: 10; color: white; }
+.brand h1 { font-size: 16px; font-weight: 700; }
+.brand p { font-size: 11px; color: rgba(255,255,255,0.4); }
+.label { position: absolute; bottom: 40px; left: 40px; z-index: 10; color: rgba(255,255,255,0.3); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <div id="tsparticles"></div>
+  <div class="brand">
+    <h1>华检科 HubForge</h1>
+    <p>AI 重塑咨询解决方案</p>
+  </div>
+  <div class="label">tsparticles Canvas 2D 模式</div>
+</div>
+<div class="right" style="padding:40px;">
+  <div style="width:300px;">
+    <h2 style="font-size:22px;font-weight:700;color:#333;margin-bottom:24px;">登录</h2>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;color:#555;margin-bottom:6px;">邮箱</label>
+      <input type="text" placeholder="you@company.com" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;" />
+    </div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;color:#555;margin-bottom:6px;">密码</label>
+      <input type="password" placeholder="输入密码" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;" />
+    </div>
+    <button style="width:100%;padding:11px;background:#1a1a2e;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;">登 录</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/tsparticles@3.9.1/tsparticles.bundle.min.js"></script>
+<script>
+(async () => {
+  try {
+    const container = await tsParticles.load({
+      id: "tsparticles",
+      options: {
+        fullScreen: false,
+        fpsLimit: 60,
+        background: {
+          color: "#1a1a2e"
+        },
+        particles: {
+          number: {
+            value: 60,
+            density: { enable: true, width: 600, height: 600 }
+          },
+          color: { value: ["#ffffff", "#88ccff", "#4499ff"] },
+          shape: { type: "circle" },
+          opacity: { value: 0.8 },
+          size: { value: { min: 1.5, max: 3.5 } },
+          links: {
+            enable: true,
+            distance: 150,
+            color: "#88ccff",
+            opacity: 0.25,
+            width: 1
+          },
+          move: {
+            enable: true,
+            speed: 0.8,
+            direction: "none",
+            outModes: { default: "out" }
+          }
+        },
+        interactivity: {
+          events: {
+            onHover: { enable: true, mode: "grab" }
+          },
+          modes: {
+            grab: {
+              distance: 180,
+              links: { opacity: 0.5, color: "#ffffff" }
+            }
+          }
+        },
+        detectRetina: true,
+        // Force canvas 2D renderer
+        style: {}
+      }
+    });
+    document.querySelector('.label').textContent = `加载成功: ${container.particles.count} 粒子`;
+  } catch (e) {
+    document.querySelector('.label').textContent = '错误: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

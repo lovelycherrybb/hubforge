@@ -1,6 +1,7 @@
 // ============================================================
 // HubForge - Prisma Schema
 // 多租户 SaaS 平台数据库设计
+// 模型: 全局用户身份 + 租户自治密码
 // 隔离方案: PostgreSQL RLS + tenantId 字段
 // ============================================================
 
@@ -22,64 +23,72 @@ model Tenant {
   id             String   @id @default(cuid())
   name           String   @db.VarChar(255)
   slug           String   @unique @db.VarChar(100)
-  status         String   @default("active") @db.VarChar(20) // active | suspended | deleted
-  quotaUsers     Int      @default(100)
-  quotaApps      Int      @default(50)
-  quotaOrgLevels Int      @default(5)
+  logoUrl        String?  @db.VarChar(500)
+  maxUsers       Int      @default(100)
+  maxApps        Int      @default(20)
+  maxOrgLevels   Int      @default(8)
+  status         String   @default("active") @db.VarChar(20) // active | suspended
+  createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  users       User[]
+  createdBy      User                 @relation(fields: [createdById], references: [id])
+  users       UserTenant[]
   departments Department[]
   permissions Permission[]
-  configs     TenantConfig[]
   tenantApps  TenantApp[]
+  apps        App[]
+  userPermissions UserPermission[]
+  tenantPermissions TenantPermission[]
 
   @@map("tenants")
 }
 
-/// 租户配置 - 功能开关、特性配置等键值对
-model TenantConfig {
-  id       String @id @default(cuid())
-  tenantId String
-  key      String @db.VarChar(100)
-  value    String @db.Text
+// ============================================================
+// 用户相关（全局用户池，不含密码）
+// ============================================================
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+/// 用户 - 全局用户身份信息，不含密码
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique @db.VarChar(255)
+  name           String   @db.VarChar(100)
+  avatarUrl      String?  @db.VarChar(500)
+  emailVerified  Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  @@unique([tenantId, key])
-  @@map("tenant_configs")
+  tenantMemberships UserTenant[]
+  organizations     UserOrganization[]
+  grantedPermissions UserPermission[] @relation("UserPermissionUser")
+  grantingPermissions UserPermission[] @relation("PermissionGranter")
+  grantingDeptPermissions DepartmentPermission[] @relation("DeptPermissionGranter")
+  createdTenants    Tenant[]
+  createdApps       App[]
+
+  @@map("users")
 }
 
-// ============================================================
-// 用户相关
-// ============================================================
+/// 用户-租户关系（含租户独立密码）
+model UserTenant {
+  id                String   @id @default(cuid())
+  userId            String
+  tenantId          String
+  passwordHash      String   @db.VarChar(255)
+  role              String   @default("member") @db.VarChar(20) // owner | admin | member
+  status            String   @default("active") @db.VarChar(20) // active | invited | suspended
+  passwordUpdatedAt DateTime?
+  failedAttempts    Int      @default(0)
+  lockedUntil       DateTime?
+  joinedAt          DateTime @default(now())
 
-/// 用户 - 系统用户，归属于某个租户
-model User {
-  id           String   @id @default(cuid())
-  email        String   @db.VarChar(255)
-  passwordHash String   @db.VarChar(255)
-  name         String   @db.VarChar(100)
-  status       String   @default("active") @db.VarChar(20) // active | locked | invited
-  tenantId     String  
-  departmentId String? 
-  isGlobalAdmin Boolean @default(false)
-  failedLoginAttempts Int      @default(0)
-  lockedUntil         DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  tenant                  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  department              Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  grantedPermissions      UserPermission[]       @relation("UserPermissionUser")
-  grantingPermissions     UserPermission[]       @relation("PermissionGranter")
-  grantingDeptPermissions DepartmentPermission[]  @relation("DeptPermissionGranter")
-
-  @@unique([tenantId, email])
+  @@unique([userId, tenantId])
+  @@index([userId])
   @@index([tenantId])
-  @@index([departmentId])
-  @@map("users")
+  @@map("user_tenants")
 }
 
 // ============================================================
@@ -90,8 +99,8 @@ model User {
 model Department {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(255)
-  parentId  String? 
-  tenantId  String  
+  parentId  String?
+  tenantId  String
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -99,12 +108,26 @@ model Department {
   tenant      Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   parent      Department?           @relation("DepartmentTree", fields: [parentId], references: [id], onDelete: SetNull)
   children    Department[]          @relation("DepartmentTree")
-  users       User[]
+  userOrgs    UserOrganization[]
   permissions DepartmentPermission[]
 
   @@index([tenantId])
   @@index([parentId])
   @@map("departments")
+}
+
+/// 用户-组织关系
+model UserOrganization {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  isPrimary      Boolean  @default(true)
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@map("user_organizations")
 }
 
 // ============================================================
@@ -124,6 +147,7 @@ model Permission {
   app              App?                  @relation(fields: [appId], references: [id], onDelete: Cascade)
   userGrants       UserPermission[]
   departmentGrants DepartmentPermission[]
+  tenantGrants     TenantPermission[]
 
   @@unique([key, tenantId])
   @@index([tenantId])
@@ -134,17 +158,20 @@ model Permission {
 /// 用户权限 - 用户与权限的多对多关系
 model UserPermission {
   id           String   @id @default(cuid())
-  userId       String  
-  permissionId String  
-  grantedBy    String? 
+  userId       String
+  tenantId     String
+  permissionId String
+  grantedBy    String?
   grantedAt    DateTime @default(now())
 
   user       User       @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   granter    User?      @relation("PermissionGranter", fields: [grantedBy], references: [id], onDelete: SetNull)
 
-  @@unique([userId, permissionId])
+  @@unique([userId, tenantId, permissionId])
   @@index([userId])
+  @@index([tenantId])
   @@index([permissionId])
   @@map("user_permissions")
 }
@@ -152,9 +179,9 @@ model UserPermission {
 /// 部门权限 - 部门与权限的多对多关系
 model DepartmentPermission {
   id           String   @id @default(cuid())
-  departmentId String  
-  permissionId String  
-  grantedBy    String? 
+  departmentId String
+  permissionId String
+  grantedBy    String?
   grantedAt    DateTime @default(now())
 
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
@@ -167,32 +194,55 @@ model DepartmentPermission {
   @@map("department_permissions")
 }
 
+/// 租户权限 - 框架权限授予租户（平台 owner 控制）
+/// 表示"该租户可以使用某个框架权限对应的功能"
+model TenantPermission {
+  id           String   @id @default(cuid())
+  tenantId     String
+  permissionId String
+  grantedBy    String?
+  grantedAt    DateTime @default(now())
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, permissionId])
+  @@index([tenantId])
+  @@index([permissionId])
+  @@map("tenant_permissions")
+}
+
 // ============================================================
 // 应用相关
 // ============================================================
 
-/// 应用 - HubForge 管理的子应用
+/// 应用 - HubForge 管理的子应用（每个租户独立注册）
 model App {
   id          String   @id @default(cuid())
+  tenantId    String
   name        String   @db.VarChar(255)
-  slug        String   @unique @db.VarChar(100)
+  slug        String   @db.VarChar(100)
   type        String   @default("pc") @db.VarChar(10) // pc | h5 | both
   description String?  @db.Text
   icon        String?  @db.VarChar(500)
   url         String   @db.VarChar(500)
+  config      Json?    // hubforge.config.json 内容
   status      String   @default("active") @db.VarChar(20) // active | inactive
-  sortOrder   Int      @default(0)
+  createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  configs     AppConfig[]
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  creator     User       @relation(fields: [createdBy], references: [id])
   permissions Permission[]
   tenantApps  TenantApp[]
 
+  @@unique([tenantId, slug])
+  @@index([tenantId])
   @@map("apps")
 }
 
-/// 租户-应用映射（主租户分配应用给租户）
+/// 租户-应用映射
 model TenantApp {
   id        String   @id @default(cuid())
   tenantId  String
@@ -209,20 +259,6 @@ model TenantApp {
   @@map("tenant_apps")
 }
 
-/// 应用配置 - 每个应用的键值对配置
-model AppConfig {
-  id    String @id @default(cuid())
-  appId String
-  key   String @db.VarChar(100)
-  value String @db.Text
-
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
-
-  @@unique([appId, key])
-  @@index([appId])
-  @@map("app_configs")
-}
-
 // ============================================================
 // 验证码
 // ============================================================
@@ -231,13 +267,14 @@ model AppConfig {
 model VerificationCode {
   id        String   @id @default(cuid())
   email     String   @db.VarChar(255)
+  tenantId  String   // 绑定到特定租户
   code      String   @db.VarChar(6)
   type      String   @default("reset_password") @db.VarChar(30)
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  @@index([email, code])
+  @@index([email, tenantId, code])
   @@index([expiresAt])
   @@map("verification_codes")
 }

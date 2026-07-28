@@ -12,7 +12,8 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const { user } = useUser();
-  const isGlobalAdmin = user?.isGlobalAdmin || false;
+  const isOwner = user?.role === "owner";
+  const isAdmin = user?.role === "owner" || user?.role === "admin";
 
   // 租户管理员可访问的页面
   const tenantAdminNavItems = [
@@ -28,7 +29,7 @@ export default function AdminLayout({
     ...tenantAdminNavItems,
   ];
 
-  const navItems = isGlobalAdmin ? globalAdminNavItems : tenantAdminNavItems;
+  const navItems = isOwner ? globalAdminNavItems : tenantAdminNavItems;
 
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-48px)]">
@@ -50,7 +51,7 @@ export default function AdminLayout({
       </div>
 
       {/* PC: 左侧边栏 */}
-      <AdminSidebar isGlobalAdmin={isGlobalAdmin} />
+      <AdminSidebar isOwner={isOwner} />
 
       {/* 内容区 */}
       <div className="flex-1 overflow-auto bg-gray-50 p-4 lg:p-6">{children}</div>

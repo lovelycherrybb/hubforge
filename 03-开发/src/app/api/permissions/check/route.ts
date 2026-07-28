@@ -1,7 +1,9 @@
 // ============================================================
 // GET /api/permissions/check — 检查当前用户权限
 // 权限要求：已认证用户
-// 检查逻辑：个人权限 ∪ 组织权限
+// 检查逻辑：
+//   - 框架权限：先查 TenantPermission（租户是否被授予），再查用户/部门权限
+//   - 应用权限：查用户/部门权限
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -23,14 +25,16 @@ export async function GET(request: NextRequest) {
   const parsed = parseQuery(request, checkQuerySchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const { key } = parsed.data;
 
-      // 全局管理员拥有所有权限
-      if (payload.isGlobalAdmin) {
+      // owner/admin 拥有所有权限
+      if (isGlobalAdmin) {
         return success({ hasPermission: true, key, source: "admin" });
       }
 
@@ -49,10 +53,28 @@ export async function GET(request: NextRequest) {
         return success({ hasPermission: false, key });
       }
 
+      // ============================================================
+      // 框架权限：先检查租户是否被授予（TenantPermission）
+      // ============================================================
+      if (permission.type === "framework") {
+        const tenantGrant = await db.tenantPermission.findFirst({
+          where: {
+            tenantId: payload.tenantId,
+            permissionId: permission.id,
+          },
+        });
+
+        if (!tenantGrant) {
+          // 租户未被授予该框架权限，直接拒绝
+          return success({ hasPermission: false, key });
+        }
+      }
+
       // 检查用户直接权限
       const userPerm = await db.userPermission.findFirst({
         where: {
           userId: payload.userId,
+          tenantId: payload.tenantId,
           permissionId: permission.id,
         },
       });
@@ -61,16 +83,28 @@ export async function GET(request: NextRequest) {
         return success({ hasPermission: true, key, source: "user" });
       }
 
-      // 检查用户所在部门的权限
-      const user = await db.user.findUnique({
-        where: { id: payload.userId },
-        select: { departmentId: true },
+      // 检查用户所在部门及祖先部门的权限（并集）
+      const userOrg = await db.userOrganization.findFirst({
+        where: { userId: payload.userId },
+        select: { organizationId: true },
       });
 
-      if (user?.departmentId) {
+      if (userOrg) {
+        // 收集当前部门及所有祖先部门 ID
+        const deptIds: string[] = [];
+        let deptId: string | null = userOrg.organizationId;
+        while (deptId) {
+          deptIds.push(deptId);
+          const result: { parentId: string | null } | null = await db.department.findUnique({
+            where: { id: deptId },
+            select: { parentId: true },
+          });
+          deptId = result?.parentId ?? null;
+        }
+
         const deptPerm = await db.departmentPermission.findFirst({
           where: {
-            departmentId: user.departmentId,
+            departmentId: { in: deptIds },
             permissionId: permission.id,
           },
         });

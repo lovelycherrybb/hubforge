@@ -1,0 +1,24 @@
+# ============================================================
+# HubForge - Split 部署：应用服务器
+# 独立应用服务器，连接远程数据库
+# 启动: docker compose -f docker-compose.app.yml up -d
+# ============================================================
+
+version: "3.9"
+
+services:
+  portal:
+    build:
+      context: ../../03-开发
+      dockerfile: Dockerfile
+    image: hubforge-portal:latest
+    container_name: hubforge-portal
+    restart: unless-stopped
+    ports:
+      - "${PORTAL_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?请设置 DATABASE_URL 指向远程数据库}
+      JWT_SECRET: ${JWT_SECRET:?请设置 JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      COOKIE_NAME: ${COOKIE_NAME:-hubforge-token}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}

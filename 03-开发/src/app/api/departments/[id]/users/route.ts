@@ -1,6 +1,6 @@
 // ============================================================
 // POST /api/departments/:id/users — 分配用户到部门
-// 权限要求：租户管理员
+// 权限要求：租户管理员（owner 或 admin）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -21,32 +21,53 @@ export async function POST(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, assignUsersSchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const dept = await db.department.findFirst({
         where: { id: params.id, tenantId: payload.tenantId },
       });
       if (!dept) return notFound("部门不存在");
 
-      // 批量更新用户的部门
-      const result = await db.user.updateMany({
+      // 验证用户属于当前租户
+      const memberships = await db.userTenant.findMany({
         where: {
-          id: { in: parsed.data.userIds },
+          userId: { in: parsed.data.userIds },
           tenantId: payload.tenantId,
         },
-        data: { departmentId: params.id },
+        select: { userId: true },
       });
+      const validUserIds = memberships.map((m) => m.userId);
+
+      // 通过 UserOrganization 关联用户到部门
+      let count = 0;
+      for (const userId of validUserIds) {
+        try {
+          await db.userOrganization.upsert({
+            where: {
+              userId_organizationId: { userId, organizationId: params.id },
+            },
+            create: { userId, organizationId: params.id },
+            update: {},
+          });
+          count++;
+        } catch {
+          // 跳过重复
+        }
+      }
 
       return success(
-        { updatedCount: result.count },
-        `已将 ${result.count} 个用户分配到 ${dept.name}`
+        { updatedCount: count },
+        `已将 ${count} 个用户分配到 ${dept.name}`
       );
     }
   );

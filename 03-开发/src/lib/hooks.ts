@@ -8,11 +8,13 @@ interface User {
   id: string;
   email: string;
   name?: string;
-  tenantId: string;
-  isGlobalAdmin: boolean;
-  tenant?: { id: string; name: string; slug: string };
+  avatarUrl?: string | null;
+  tenantId?: string;
+  role?: "owner" | "admin" | "member";
+  tenant?: { id: string; name: string; slug: string; logoUrl?: string | null };
   department?: { id: string; name: string } | null;
-  permissions?: { key: string; label: string }[];
+  permissions?: { key: string; label: string; type?: string }[];
+  status?: string;
 }
 
 export function useUser() {

@@ -11,7 +11,7 @@ import { mockPrisma, createTestUser, createTestTenant, createAuthToken } from '.
 // ============================================================
 describe('POST /api/permissions/assign — 权限分配', () => {
   it('主租户管理员分配框架权限 → 成功（TC-043）', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     // 权限存在，类型为 framework
     mockPrisma.permission.findFirst.mockResolvedValue({
@@ -49,7 +49,7 @@ describe('POST /api/permissions/assign — 权限分配', () => {
 
   it('非全局管理员分配框架权限 → 返回 403（TC-045）', async () => {
     // 非全局管理员
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const { POST } = await import('@/app/api/permissions/assign/route');
 
@@ -75,7 +75,7 @@ describe('POST /api/permissions/assign — 权限分配', () => {
   });
 
   it('主租户管理员分配应用权限 → 成功（TC-044）', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     // 权限存在，类型为 app
     mockPrisma.permission.findFirst.mockResolvedValue({
@@ -112,7 +112,7 @@ describe('POST /api/permissions/assign — 权限分配', () => {
   });
 
   it('撤销用户权限 → 成功', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     mockPrisma.permission.findFirst.mockResolvedValue({
       id: 'perm-001',
@@ -148,11 +148,125 @@ describe('POST /api/permissions/assign — 权限分配', () => {
 });
 
 // ============================================================
+// 框架权限授予租户 POST /api/permissions/assign (tenantId)
+// ============================================================
+describe('POST /api/permissions/assign — 框架权限授予租户', () => {
+  it('平台 owner 将框架权限授予租户 → 成功', async () => {
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
+
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.access',
+      label: '巡检系统访问',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    mockPrisma.tenantPermission.upsert.mockResolvedValue({
+      id: 'tp-001',
+      tenantId: 'tenant-002',
+      permissionId: 'perm-framework-001',
+    });
+
+    const { POST } = await import('@/app/api/permissions/assign/route');
+
+    const request = new Request('http://localhost:3000/api/permissions/assign', {
+      method: 'POST',
+      headers: {
+        Cookie: `hubforge-token=${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        permissionId: 'perm-framework-001',
+        tenantId: 'tenant-002',
+        action: 'grant',
+      }),
+    }) as any;
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.message).toContain('框架权限已授予租户');
+    expect(mockPrisma.tenantPermission.upsert).toHaveBeenCalled();
+  });
+
+  it('平台 owner 撤销租户框架权限 → 成功', async () => {
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
+
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.access',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    mockPrisma.tenantPermission.deleteMany.mockResolvedValue({ count: 1 });
+
+    const { POST } = await import('@/app/api/permissions/assign/route');
+
+    const request = new Request('http://localhost:3000/api/permissions/assign', {
+      method: 'POST',
+      headers: {
+        Cookie: `hubforge-token=${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        permissionId: 'perm-framework-001',
+        tenantId: 'tenant-002',
+        action: 'revoke',
+      }),
+    }) as any;
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.message).toContain('撤销租户框架权限');
+    expect(mockPrisma.tenantPermission.deleteMany).toHaveBeenCalled();
+  });
+
+  it('非 owner 尝试授予框架权限给租户 → 返回 403', async () => {
+    const token = await createAuthToken('admin-001', 'tenant-001', 'admin');
+
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.access',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    const { POST } = await import('@/app/api/permissions/assign/route');
+
+    const request = new Request('http://localhost:3000/api/permissions/assign', {
+      method: 'POST',
+      headers: {
+        Cookie: `hubforge-token=${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        permissionId: 'perm-framework-001',
+        tenantId: 'tenant-002',
+        action: 'grant',
+      }),
+    }) as any;
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data.success).toBe(false);
+  });
+});
+
+// ============================================================
 // 权限检查 GET /api/permissions/check
 // ============================================================
 describe('GET /api/permissions/check — 权限检查', () => {
   it('用户有个人权限 → 检查通过（source: user）', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     // 全局管理员为 false，所以不走 admin 快速路径
     mockPrisma.permission.findFirst.mockResolvedValue({
@@ -189,7 +303,7 @@ describe('GET /api/permissions/check — 权限检查', () => {
   });
 
   it('用户通过组织继承权限 → 检查通过（source: department）', async () => {
-    const token = await createAuthToken('user-002', 'tenant-001', false);
+    const token = await createAuthToken('user-002', 'tenant-001', 'member');
 
     mockPrisma.permission.findFirst.mockResolvedValue({
       id: 'perm-001',
@@ -201,9 +315,9 @@ describe('GET /api/permissions/check — 权限检查', () => {
     // 用户没有个人权限
     mockPrisma.userPermission.findFirst.mockResolvedValue(null);
 
-    // 用户属于部门 dept-001
-    mockPrisma.user.findUnique.mockResolvedValue({
-      departmentId: 'dept-001',
+    // 用户属于组织 org-001（新模型用 userOrganization 代替 user.departmentId）
+    mockPrisma.userOrganization.findFirst.mockResolvedValue({
+      organizationId: 'dept-001',
     });
 
     // 部门有该权限
@@ -232,7 +346,7 @@ describe('GET /api/permissions/check — 权限检查', () => {
   });
 
   it('用户无权限 → 检查不通过（TC-047）', async () => {
-    const token = await createAuthToken('user-003', 'tenant-001', false);
+    const token = await createAuthToken('user-003', 'tenant-001', 'member');
 
     mockPrisma.permission.findFirst.mockResolvedValue({
       id: 'perm-001',
@@ -245,9 +359,7 @@ describe('GET /api/permissions/check — 权限检查', () => {
     mockPrisma.userPermission.findFirst.mockResolvedValue(null);
 
     // 用户无部门
-    mockPrisma.user.findUnique.mockResolvedValue({
-      departmentId: null,
-    });
+    mockPrisma.userOrganization.findFirst.mockResolvedValue(null);
 
     const { GET } = await import('@/app/api/permissions/check/route');
 
@@ -267,7 +379,7 @@ describe('GET /api/permissions/check — 权限检查', () => {
   });
 
   it('全局管理员检查任意权限 → 直接通过（source: admin）', async () => {
-    const token = await createAuthToken('admin-001', 'tenant-001', true);
+    const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
     const { GET } = await import('@/app/api/permissions/check/route');
 
@@ -286,6 +398,120 @@ describe('GET /api/permissions/check — 权限检查', () => {
     expect(data.data.hasPermission).toBe(true);
     expect(data.data.source).toBe('admin');
   });
+
+  it('框架权限：租户未被授予 → 检查不通过', async () => {
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
+
+    // 框架权限存在
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.access',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    // 租户未被授予该框架权限
+    mockPrisma.tenantPermission.findFirst.mockResolvedValue(null);
+
+    const { GET } = await import('@/app/api/permissions/check/route');
+
+    const request = new Request(
+      'http://localhost:3000/api/permissions/check?key=app.inspection.access',
+      {
+        method: 'GET',
+        headers: { Cookie: `hubforge-token=${token}` },
+      }
+    ) as any;
+
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data.hasPermission).toBe(false);
+  });
+
+  it('框架权限：租户已授予 + 用户有权限 → 检查通过', async () => {
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
+
+    // 框架权限存在
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.access',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    // 租户已被授予该框架权限
+    mockPrisma.tenantPermission.findFirst.mockResolvedValue({
+      id: 'tp-001',
+      tenantId: 'tenant-001',
+      permissionId: 'perm-framework-001',
+    });
+
+    // 用户有直接权限
+    mockPrisma.userPermission.findFirst.mockResolvedValue({
+      id: 'up-001',
+      userId: 'user-001',
+      permissionId: 'perm-framework-001',
+    });
+
+    const { GET } = await import('@/app/api/permissions/check/route');
+
+    const request = new Request(
+      'http://localhost:3000/api/permissions/check?key=app.inspection.access',
+      {
+        method: 'GET',
+        headers: { Cookie: `hubforge-token=${token}` },
+      }
+    ) as any;
+
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data.hasPermission).toBe(true);
+    expect(data.data.source).toBe('user');
+  });
+
+  it('框架权限：租户已授予但用户无个人/部门权限 → 检查不通过', async () => {
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
+
+    mockPrisma.permission.findFirst.mockResolvedValue({
+      id: 'perm-framework-001',
+      key: 'app.inspection.featureA',
+      type: 'framework',
+      tenantId: null,
+    });
+
+    // 租户已被授予
+    mockPrisma.tenantPermission.findFirst.mockResolvedValue({
+      id: 'tp-001',
+      tenantId: 'tenant-001',
+      permissionId: 'perm-framework-001',
+    });
+
+    // 用户无个人权限
+    mockPrisma.userPermission.findFirst.mockResolvedValue(null);
+
+    // 用户无部门
+    mockPrisma.userOrganization.findFirst.mockResolvedValue(null);
+
+    const { GET } = await import('@/app/api/permissions/check/route');
+
+    const request = new Request(
+      'http://localhost:3000/api/permissions/check?key=app.inspection.featureA',
+      {
+        method: 'GET',
+        headers: { Cookie: `hubforge-token=${token}` },
+      }
+    ) as any;
+
+    const response = await GET(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.data.hasPermission).toBe(false);
+  });
 });
 
 // ============================================================
@@ -293,11 +519,19 @@ describe('GET /api/permissions/check — 权限检查', () => {
 // ============================================================
 describe('GET /api/permissions — 权限列表', () => {
   it('已登录用户获取权限列表 → 返回框架权限和应用权限', async () => {
-    const token = await createAuthToken('user-001', 'tenant-001', false);
+    const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const permissions = [
-      { id: 'p1', key: 'framework.perm1', label: '框架权限1', type: 'framework', tenantId: null, app: null },
-      { id: 'p2', key: 'app.perm1', label: '应用权限1', type: 'app', tenantId: 'tenant-001', app: { id: 'app-001', name: '应用1' } },
+      {
+        id: 'p1', key: 'framework.perm1', label: '框架权限1',
+        type: 'framework', tenantId: null, app: null,
+        tenantGrants: [{ id: 'tp-1', tenantId: 'tenant-001', grantedAt: new Date(), tenant: { id: 'tenant-001', name: '测试租户', slug: 'test' } }],
+      },
+      {
+        id: 'p2', key: 'app.perm1', label: '应用权限1',
+        type: 'app', tenantId: 'tenant-001', app: { id: 'app-001', name: '应用1' },
+        tenantGrants: [],
+      },
     ];
 
     mockPrisma.permission.findMany.mockResolvedValue(permissions);
@@ -316,6 +550,8 @@ describe('GET /api/permissions — 权限列表', () => {
     expect(data.success).toBe(true);
     expect(data.data.framework).toHaveLength(1);
     expect(data.data.app).toHaveLength(1);
+    // 框架权限应包含 tenantGrants
+    expect(data.data.framework[0].tenantGrants).toHaveLength(1);
   });
 
   it('未登录获取权限列表 → 返回 401', async () => {

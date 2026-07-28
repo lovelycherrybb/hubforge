@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案A-2: 安全盾牌 + 数据流粒子</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a14; display: flex; height: 100vh; font-family: 'Inter', sans-serif; }
+.panel { width: 40%; height: 100vh; position: relative; overflow: hidden; }
+.panel canvas { position: absolute; inset: 0; }
+.brand { position: absolute; top: 40px; left: 40px; z-index: 10; display: flex; align-items: center; gap: 12px; }
+.brand-icon { width: 36px; height: 36px; background: rgba(255,255,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.brand-icon svg { width: 20px; height: 20px; fill: white; }
+.brand-text { display: flex; flex-direction: column; }
+.brand-name { color: white; font-weight: 700; font-size: 16px; letter-spacing: -0.5px; }
+.brand-sub { color: rgba(255,255,255,0.4); font-size: 11px; }
+.time { position: absolute; bottom: 40px; left: 40px; z-index: 10; color: rgba(255,255,255,0.15); font-size: 12px; }
+.label { position: absolute; bottom: 40px; right: 40px; z-index: 10; color: rgba(255,255,255,0.3); font-size: 11px; background: rgba(255,255,255,0.05); padding: 4px 10px; border-radius: 4px; }
+.right { flex: 1; display: flex; align-items: center; justify-content: center; background: #fafafa; }
+.form-box { width: 320px; }
+.form-box h2 { font-size: 22px; font-weight: 700; color: #333; margin-bottom: 24px; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+.field input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+.field input:focus { border-color: #1a1a2e; box-shadow: 0 0 0 3px rgba(26,26,46,0.08); }
+.btn { width: 100%; padding: 11px; background: #1a1a2e; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="panel">
+  <canvas id="canvas"></canvas>
+  <div class="brand">
+    <div class="brand-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <div class="brand-text">
+      <span class="brand-name">华检科 HubForge</span>
+      <span class="brand-sub">AI 重塑咨询解决方案</span>
+    </div>
+  </div>
+  <div class="time">2026.07</div>
+  <div class="label">设计方向 A-2 · 安全盾牌 + 数据流</div>
+</div>
+<div class="right">
+  <div class="form-box">
+    <h2>登录</h2>
+    <div class="field"><label>邮箱</label><input type="text" placeholder="you@company.com" /></div>
+    <div class="field"><label>密码</label><input type="password" placeholder="输入你的密码" /></div>
+    <button class="btn">登 录</button>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H, mouse = { x: -999, y: -999 };
+
+function resize() {
+  W = canvas.width = canvas.offsetWidth;
+  H = canvas.height = canvas.offsetHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  mouse.x = e.clientX - r.left;
+  mouse.y = e.clientY - r.top;
+});
+canvas.addEventListener('mouseleave', () => { mouse.x = -999; mouse.y = -999; });
+
+// 安全盾牌轮廓 (居中偏下)
+function getShieldPoints(cx, cy, scale) {
+  const pts = [];
+  // 盾牌上半部分 — 圆弧
+  for (let a = -Math.PI * 0.8; a <= Math.PI * 0.8; a += 0.08) {
+    pts.push({ x: cx + Math.cos(a) * 55 * scale, y: cy - 30 * scale + Math.sin(a) * 40 * scale * -1 });
+  }
+  // 盾牌下半部分 — 尖角
+  const steps = 20;
+  const rightEdge = { x: cx + 55 * scale * Math.cos(Math.PI * 0.8), y: cy - 30 * scale - 40 * scale * Math.sin(Math.PI * 0.8) };
+  const bottomTip = { x: cx, y: cy + 60 * scale };
+  const leftEdge = { x: cx - 55 * scale * Math.cos(Math.PI * 0.8), y: rightEdge.y };
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    if (t < 0.5) {
+      const lt = t * 2;
+      pts.push({ x: rightEdge.x + (bottomTip.x - rightEdge.x) * lt, y: rightEdge.y + (bottomTip.y - rightEdge.y) * lt });
+    } else {
+      const lt = (t - 0.5) * 2;
+      pts.push({ x: bottomTip.x + (leftEdge.x - bottomTip.x) * lt, y: bottomTip.y + (leftEdge.y - bottomTip.y) * lt });
+    }
+  }
+  return pts;
+}
+
+// 高速公路流线 — 从左到右的数据流
+function getHighwayStreams() {
+  const streams = [];
+  for (let i = 0; i < 5; i++) {
+    const y0 = H * (0.1 + i * 0.2);
+    const pts = [];
+    for (let x = -20; x <= W + 20; x += 15) {
+      const wave = Math.sin(x * 0.008 + i * 1.5) * 20;
+      pts.push({ x, y: y0 + wave });
+    }
+    streams.push(pts);
+  }
+  return streams;
+}
+
+let particles = [];
+let shieldPts = [];
+let streamPts = [];
+
+function init() {
+  particles = [];
+  shieldPts = getShieldPoints(W * 0.5, H * 0.5, Math.min(W, H) / 300);
+  streamPts = getHighwayStreams();
+
+  // 盾牌粒子
+  shieldPts.forEach(p => {
+    particles.push({
+      x: p.x + (Math.random() - 0.5) * 6,
+      y: p.y + (Math.random() - 0.5) * 6,
+      ox: p.x, oy: p.y,
+      r: Math.random() * 1.2 + 0.8,
+      type: 'shield',
+      opacity: Math.random() * 0.4 + 0.4,
+    });
+  });
+
+  // 流线粒子 (高速公路/数据流)
+  streamPts.forEach(stream => {
+    stream.forEach(p => {
+      if (Math.random() > 0.6) return; // 稀疏一些
+      particles.push({
+        x: p.x, y: p.y,
+        ox: p.x, oy: p.y,
+        vx: 0.3 + Math.random() * 0.5, vy: 0,
+        r: Math.random() * 1 + 0.6,
+        type: 'stream',
+        opacity: Math.random() * 0.3 + 0.2,
+      });
+    });
+  });
+
+  // 散落粒子
+  for (let i = 0; i < 60; i++) {
+    particles.push({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.2, vy: (Math.random() - 0.5) * 0.2,
+      r: Math.random() * 1.2 + 0.4,
+      type: 'bg',
+      opacity: Math.random() * 0.4 + 0.15,
+    });
+  }
+}
+init();
+window.addEventListener('resize', () => { resize(); init(); });
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 背景
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0b0b18');
+  bg.addColorStop(0.5, '#151528');
+  bg.addColorStop(1, '#0d0d1e');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 中心光晕
+  const glow = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.45);
+  glow.addColorStop(0, 'rgba(20,50,100,0.18)');
+  glow.addColorStop(0.5, 'rgba(15,35,80,0.08)');
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  const time = Date.now() * 0.001;
+
+  // 更新粒子
+  particles.forEach(p => {
+    const dx = p.x - mouse.x, dy = p.y - mouse.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 120) {
+      const force = (120 - dist) / 120 * 3;
+      p.x += (dx / dist) * force;
+      p.y += (dy / dist) * force;
+    }
+
+    if (p.type === 'stream') {
+      p.x += p.vx;
+      if (p.x > W + 20) p.x = -20;
+      p.y = p.oy + Math.sin(time * 1.5 + p.x * 0.01) * 3;
+    } else if (p.type === 'bg') {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+    } else if (p.ox !== undefined) {
+      p.x += (p.ox - p.x) * 0.025;
+      p.y += (p.oy - p.y) * 0.025;
+      p.x += Math.sin(time + p.ox * 0.02) * 0.2;
+      p.y += Math.cos(time + p.oy * 0.02) * 0.2;
+    }
+  });
+
+  // 连线
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const a = particles[i], b = particles[j];
+      const dx = a.x - b.x, dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = (a.type === 'shield' && b.type === 'shield') ? 50 : 100;
+      if (dist < maxDist) {
+        const alpha = (1 - dist / maxDist) * 0.12;
+        if (a.type === 'shield' && b.type === 'shield') {
+          ctx.strokeStyle = `rgba(60,180,255,${alpha})`;
+        } else if (a.type === 'stream' || b.type === 'stream') {
+          ctx.strokeStyle = `rgba(100,200,255,${alpha * 0.7})`;
+        } else {
+          ctx.strokeStyle = `rgba(120,160,255,${alpha * 0.6})`;
+        }
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 绘制粒子
+  particles.forEach(p => {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 2.5 + p.x * 0.015 + p.y * 0.015);
+    const alpha = p.opacity * (0.5 + pulse * 0.5);
+
+    if (p.type === 'shield') {
+      ctx.fillStyle = `rgba(60,180,255,${alpha})`;
+    } else if (p.type === 'stream') {
+      ctx.fillStyle = `rgba(100,220,255,${alpha})`;
+    } else {
+      ctx.fillStyle = `rgba(130,170,255,${alpha})`;
+    }
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (0.7 + pulse * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 发光
+    if (p.r > 0.8 && (p.type === 'shield' || p.type === 'stream')) {
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      if (p.type === 'shield') {
+        g.addColorStop(0, `rgba(60,180,255,${alpha * 0.25})`);
+      } else {
+        g.addColorStop(0, `rgba(100,220,255,${alpha * 0.2})`);
+      }
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // POST /api/tenants/[id]/users/[userId]/reset-password — 重置用户密码
-// 权限要求：主租户管理员
+// 权限要求：owner 角色（平台管理员）
 // 默认密码：1234Aa78，可通过 body 自定义
 // ============================================================
 
@@ -28,12 +28,15 @@ export async function POST(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限主租户");
+  if (payload.role !== "owner") return forbidden("仅限平台管理员");
 
-  const user = await db.user.findFirst({
-    where: { id: params.userId, tenantId: params.id },
+  // 查找用户在该租户的 UserTenant 记录
+  const userTenant = await db.userTenant.findUnique({
+    where: {
+      userId_tenantId: { userId: params.userId, tenantId: params.id },
+    },
   });
-  if (!user) return notFound("用户不存在");
+  if (!userTenant) return notFound("用户不存在");
 
   const parsed = await parseBody(request, resetPasswordSchema);
   if (!parsed.success) return error(parsed.error);
@@ -41,13 +44,14 @@ export async function POST(
   const { password } = parsed.data;
   const passwordHash = await hash(password, 12);
 
-  await db.user.update({
-    where: { id: params.userId },
+  await db.userTenant.update({
+    where: { id: userTenant.id },
     data: {
       passwordHash,
-      failedLoginAttempts: 0,
+      failedAttempts: 0,
       lockedUntil: null,
       status: "active",
+      passwordUpdatedAt: new Date(),
     },
   });
 

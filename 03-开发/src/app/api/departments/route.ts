@@ -1,6 +1,6 @@
 // ============================================================
 // POST /api/departments — 创建部门
-// 权限要求：租户管理员
+// 权限要求：租户管理员（owner 或 admin）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -20,14 +20,17 @@ const createDepartmentSchema = z.object({
 export async function POST(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, createDepartmentSchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const { name, parentId, sortOrder } = parsed.data;
 
@@ -50,8 +53,8 @@ export async function POST(request: NextRequest) {
           level++;
         }
 
-        if (level >= tenant.quotaOrgLevels) {
-          return error(`组织层级不能超过 ${tenant.quotaOrgLevels} 层`);
+        if (level >= tenant.maxOrgLevels) {
+          return error(`组织层级不能超过 ${tenant.maxOrgLevels} 层`);
         }
       }
 

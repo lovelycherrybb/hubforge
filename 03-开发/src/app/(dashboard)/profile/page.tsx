@@ -46,7 +46,7 @@ export default function ProfilePage() {
         <div className="px-6 py-4 flex items-center justify-between">
           <span className="text-sm text-gray-500">角色</span>
           <span className="text-sm text-[#333]">
-            {user.isGlobalAdmin ? "平台管理员" : "普通用户"}
+            {user.role === "owner" ? "平台管理员" : user.role === "admin" ? "租户管理员" : "普通用户"}
           </span>
         </div>
       </div>

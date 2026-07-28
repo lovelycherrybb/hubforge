@@ -5,15 +5,15 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface AdminSidebarProps {
-  isGlobalAdmin?: boolean;
+  isOwner?: boolean;
 }
 
-export function AdminSidebar({ isGlobalAdmin }: AdminSidebarProps) {
+export function AdminSidebar({ isOwner }: AdminSidebarProps) {
   const pathname = usePathname();
 
   const navItems = [
     // 租户管理仅主租户可见
-    ...(isGlobalAdmin ? [{ href: "/admin/tenants", label: "租户" }] : []),
+    ...(isOwner ? [{ href: "/admin/tenants", label: "租户" }] : []),
     { href: "/admin/users", label: "用户" },
     { href: "/admin/departments", label: "部门" },
     { href: "/admin/permissions", label: "权限" },

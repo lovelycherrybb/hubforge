@@ -64,11 +64,18 @@ export async function POST(request: NextRequest) {
       data: { used: true },
     });
 
-    await tx.user.update({
-      where: { id: user.id },
+    // 密码存储在 UserTenant 表中，通过验证码关联的租户定位
+    await tx.userTenant.update({
+      where: {
+        userId_tenantId: {
+          userId: user.id,
+          tenantId: verification.tenantId,
+        },
+      },
       data: {
         passwordHash,
-        failedLoginAttempts: 0,
+        passwordUpdatedAt: new Date(),
+        failedAttempts: 0,
         lockedUntil: null,
       },
     });

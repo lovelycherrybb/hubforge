@@ -46,7 +46,7 @@ interface TenantUser {
   email: string;
   name: string;
   status: string;
-  isGlobalAdmin: boolean;
+  role: "owner" | "admin" | "member";
   department?: { id: string; name: string } | null;
 }
 
@@ -174,7 +174,7 @@ export default function TenantsPage() {
     if (!activeTenant) return;
     try {
       await api.put(`/api/tenants/${activeTenant.id}/users/${user.id}`, {
-        isGlobalAdmin: !user.isGlobalAdmin,
+        role: user.role === 'admin' ? 'member' : 'admin',
       });
       loadUsers(activeTenant.id);
     } catch {
@@ -472,7 +472,7 @@ export default function TenantsPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{user.name || user.email}</span>
-                              {user.isGlobalAdmin && (
+                              {(user.role === "owner" || user.role === "admin") && (
                                 <Badge variant="info">管理员</Badge>
                               )}
                               <Badge variant={user.status === "active" ? "success" : "danger"}>
@@ -496,10 +496,10 @@ export default function TenantsPage() {
                             </Button>
                             <Button
                               size="sm"
-                              variant={user.isGlobalAdmin ? "danger" : "ghost"}
+                              variant={user.role === "admin" ? "danger" : "ghost"}
                               onClick={() => toggleAdmin(user)}
                             >
-                              {user.isGlobalAdmin ? "取消管理员" : "设为管理员"}
+                              {user.role === "admin" ? "取消管理员" : "设为管理员"}
                             </Button>
                           </div>
                         </div>

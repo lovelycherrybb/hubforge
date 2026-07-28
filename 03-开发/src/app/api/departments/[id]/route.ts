@@ -1,7 +1,7 @@
 // ============================================================
 // PUT    /api/departments/:id  — 更新部门
 // DELETE /api/departments/:id  — 删除部门
-// 权限要求：租户管理员
+// 权限要求：租户管理员（owner 或 admin）
 // ============================================================
 
 import { NextRequest } from "next/server";
@@ -23,14 +23,17 @@ export async function PUT(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
 
   const parsed = await parseBody(request, updateDepartmentSchema);
   if (!parsed.success) return error(parsed.error);
 
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const dept = await db.department.findFirst({
         where: { id: params.id, tenantId: payload.tenantId },
@@ -53,11 +56,14 @@ export async function DELETE(
 ) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
-  if (!payload.isGlobalAdmin) return forbidden("仅限管理员");
+  if (payload.role !== "owner" && payload.role !== "admin")
+    return forbidden("仅限管理员");
+
+  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
 
   return withTenantContext(
     payload.tenantId,
-    payload.isGlobalAdmin,
+    isGlobalAdmin,
     async () => {
       const dept = await db.department.findFirst({
         where: { id: params.id, tenantId: payload.tenantId },
@@ -72,9 +78,9 @@ export async function DELETE(
         return error("请先删除或移走子部门");
       }
 
-      // 检查是否有用户
-      const userCount = await db.user.count({
-        where: { departmentId: params.id },
+      // 检查是否有用户（通过 UserOrganization）
+      const userCount = await db.userOrganization.count({
+        where: { organizationId: params.id },
       });
       if (userCount > 0) {
         return error(`该部门下还有 ${userCount} 个用户，请先移除`);

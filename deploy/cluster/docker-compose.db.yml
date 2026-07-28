@@ -1,0 +1,57 @@
+# ============================================================
+# HubForge - Cluster 部署：PostgreSQL + PgBouncer 连接池
+# 启动: docker compose -f docker-compose.db.yml up -d
+# ============================================================
+
+version: "3.9"
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:16-alpine
+    container_name: hubforge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hubforge}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请设置 POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # 不直接暴露，通过 PgBouncer 访问
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-hubforge}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PgBouncer 连接池
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1-p2
+    container_name: hubforge-pgbouncer
+    restart: unless-stopped
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:5432"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?}
+      DB_NAME: ${POSTGRES_DB:-hubforge}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 50
+      MIN_POOL_SIZE: 10
+      RESERVE_POOL_SIZE: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
