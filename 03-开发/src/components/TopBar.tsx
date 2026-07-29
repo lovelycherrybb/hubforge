@@ -32,9 +32,9 @@ export function TopBar({ appName, user }: TopBarProps) {
       {/* Nav */}
       <nav className="hidden lg:flex items-center gap-1 ml-3">
         <Link
-          href="/"
+          href="/dashboard"
           className={`px-3 py-1 rounded-md text-sm transition-colors ${
-            pathname === "/"
+            pathname === "/dashboard"
               ? "bg-[#1a1a2e]/5 text-[#1a1a2e] font-medium"
               : "text-[#555] hover:bg-gray-100"
           }`}
