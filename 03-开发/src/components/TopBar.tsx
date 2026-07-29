@@ -21,13 +21,13 @@ export function TopBar({ appName, user }: TopBarProps) {
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-40">
       {/* Logo */}
-      <Link href="/" className="flex items-center gap-2 shrink-0 group">
+      <a href="/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 shrink-0 group">
         <img src="/logo.png" alt="华检科" className="w-7 h-7 rounded object-cover" />
         <div className="hidden sm:flex flex-col leading-tight">
           <span className="text-sm font-bold text-[#1a1a2e] tracking-tight">华检科 HubForge</span>
           <span className="text-[10px] text-gray-400">AI 重塑咨询解决方案</span>
         </div>
-      </Link>
+      </a>
 
       {/* Nav */}
       <nav className="hidden lg:flex items-center gap-1 ml-3">
