@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HubForge 前端动画效果库</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0f; color: #e0e0e0; font-family: 'Inter', -apple-system, sans-serif; }
+.header { padding: 40px 0 20px; text-align: center; }
+.header h1 { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #4a9eff, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.header p { color: #666; font-size: 14px; margin-top: 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto; padding: 20px 24px 60px; }
+.card { background: #111118; border: 1px solid #222; border-radius: 12px; overflow: hidden; transition: border-color 0.3s; }
+.card:hover { border-color: #333; }
+.card-head { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #1a1a22; }
+.card-head h3 { font-size: 14px; font-weight: 600; color: #ccc; }
+.card-head .tag { font-size: 11px; color: #666; background: #1a1a22; padding: 2px 8px; border-radius: 4px; }
+.card-demo { height: 220px; position: relative; overflow: hidden; }
+.card-demo canvas { position: absolute; inset: 0; }
+.card-demo .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.card-foot { padding: 10px 18px; font-size: 12px; color: #555; border-top: 1px solid #1a1a22; }
+.cat-title { grid-column: 1 / -1; padding: 30px 0 10px; font-size: 18px; font-weight: 700; color: #888; border-bottom: 1px solid #1a1a22; }
+/* 通用动画 */
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>HubForge 前端动画效果库</h1>
+  <p>点击卡片可展开预览 · 复制效果名称发给我即可集成</p>
+</div>
+<div class="grid" id="grid"></div>
+<script>
+// ═══════════════════════════════════════════════════════
+// 动画效果注册表
+// ═══════════════════════════════════════════════════════
+const effects = [
+  // ── 粒子类 ──
+  { cat: "粒子类", name: "particle-network", title: "粒子网络", desc: "经典粒子+连线，鼠标推开交互", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d'); const ps = [];
+      for (let i = 0; i < 60; i++) ps.push({ x: Math.random()*c.width, y: Math.random()*c.height, vx: (Math.random()-.5)*.6, vy: (Math.random()-.5)*.6, r: Math.random()*2+1 });
+      let mx = -999, my = -999;
+      c.onmousemove = e => { const r = c.getBoundingClientRect(); mx = e.clientX-r.left; my = e.clientY-r.top; };
+      c.onmouseleave = () => { mx = -999; my = -999; };
+      (function loop() {
+        ctx.clearRect(0,0,c.width,c.height);
+        ps.forEach(p => {
+          const dx = p.x-mx, dy = p.y-my, d = Math.sqrt(dx*dx+dy*dy);
+          if (d < 80) { p.x += dx/d*2; p.y += dy/d*2; }
+          p.x += p.vx; p.y += p.vy;
+          if (p.x < 0) p.x = c.width; if (p.x > c.width) p.x = 0;
+          if (p.y < 0) p.y = c.height; if (p.y > c.height) p.y = 0;
+          ctx.fillStyle = 'rgba(100,180,255,0.7)'; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        });
+        for (let i = 0; i < ps.length; i++) for (let j = i+1; j < ps.length; j++) {
+          const d = Math.hypot(ps[i].x-ps[j].x, ps[i].y-ps[j].y);
+          if (d < 120) { ctx.strokeStyle = `rgba(100,180,255,${(1-d/120)*0.2})`; ctx.beginPath(); ctx.moveTo(ps[i].x,ps[i].y); ctx.lineTo(ps[j].x,ps[j].y); ctx.stroke(); }
+        }
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "粒子类", name: "star-field", title: "星空纵深", desc: "无限纵深的星空飞行效果", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d'); const stars = [];
+      for (let i = 0; i < 400; i++) stars.push({ x: Math.random()*c.width-c.width/2, y: Math.random()*c.height-c.height/2, z: Math.random()*c.width });
+      (function loop() {
+        ctx.fillStyle = 'rgba(10,10,15,0.3)'; ctx.fillRect(0,0,c.width,c.height);
+        const cx = c.width/2, cy = c.height/2;
+        stars.forEach(s => {
+          s.z -= 2; if (s.z <= 0) s.z = c.width;
+          const k = 200/s.z, px = s.x*k+cx, py = s.y*k+cy, r = (1-s.z/c.width)*2.5;
+          if (px >= 0 && px <= c.width && py >= 0 && py <= c.height) {
+            ctx.fillStyle = `rgba(200,220,255,${1-s.z/c.width})`;
+            ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2); ctx.fill();
+          }
+        });
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "粒子类", name: "matrix-rain", title: "矩阵雨", desc: "黑客帝国数字雨效果", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      const fontSize = 14, cols = Math.floor(c.width / fontSize), drops = Array(cols).fill(1);
+      const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF';
+      (function loop() {
+        ctx.fillStyle = 'rgba(10,10,15,0.08)'; ctx.fillRect(0,0,c.width,c.height);
+        ctx.fillStyle = '#0f0'; ctx.font = fontSize+'px monospace';
+        for (let i = 0; i < drops.length; i++) {
+          const ch = chars[Math.floor(Math.random()*chars.length)];
+          ctx.fillStyle = `rgba(0,${150+Math.random()*105},0,${0.5+Math.random()*0.5})`;
+          ctx.fillText(ch, i*fontSize, drops[i]*fontSize);
+          if (drops[i]*fontSize > c.height && Math.random() > 0.975) drops[i] = 0;
+          drops[i]++;
+        }
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "粒子类", name: "firefly", title: "萤火虫", desc: "柔和的萤火虫漂浮光点", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      const ps = Array.from({length: 50}, () => ({
+        x: Math.random()*c.width, y: Math.random()*c.height,
+        vx: (Math.random()-.5)*.3, vy: (Math.random()-.5)*.3,
+        r: Math.random()*3+2, phase: Math.random()*Math.PI*2, speed: Math.random()*0.02+0.01
+      }));
+      (function loop() {
+        ctx.clearRect(0,0,c.width,c.height);
+        const t = Date.now() * 0.001;
+        ps.forEach(p => {
+          p.x += p.vx + Math.sin(t + p.phase) * 0.3;
+          p.y += p.vy + Math.cos(t * 0.7 + p.phase) * 0.3;
+          if (p.x < 0) p.x = c.width; if (p.x > c.width) p.x = 0;
+          if (p.y < 0) p.y = c.height; if (p.y > c.height) p.y = 0;
+          const alpha = 0.3 + 0.7 * Math.sin(t * 2 + p.phase);
+          const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*6);
+          g.addColorStop(0, `rgba(255,240,100,${alpha*0.6})`);
+          g.addColorStop(1, 'transparent');
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x,p.y,p.r*6,0,Math.PI*2); ctx.fill();
+          ctx.fillStyle = `rgba(255,255,200,${alpha})`;
+          ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        });
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "粒子类", name: "particle-explosion", title: "粒子爆炸", desc: "点击产生粒子爆炸效果", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d'); let particles = [];
+      const colors = ['#4a9eff','#a855f7','#ec4899','#f59e0b','#10b981'];
+      c.onclick = e => {
+        const r = c.getBoundingClientRect(), x = e.clientX-r.left, y = e.clientY-r.top;
+        for (let i = 0; i < 40; i++) {
+          const a = Math.random()*Math.PI*2, spd = Math.random()*5+2;
+          particles.push({ x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd, r: Math.random()*3+1, life: 1, color: colors[Math.floor(Math.random()*colors.length)] });
+        }
+      };
+      (function loop() {
+        ctx.clearRect(0,0,c.width,c.height);
+        particles = particles.filter(p => p.life > 0);
+        particles.forEach(p => {
+          p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life -= 0.015;
+          ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+          ctx.beginPath(); ctx.arc(p.x,p.y,p.r*p.life,0,Math.PI*2); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('点击任意位置', c.width/2, c.height/2);
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  // ── 渐变/背景类 ──
+  { cat: "渐变/背景类", name: "aurora-wave", title: "极光波浪", desc: "多层渐变色带缓慢流动", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      (function loop() {
+        const t = Date.now()*0.0005;
+        ctx.fillStyle = '#0a0a15'; ctx.fillRect(0,0,c.width,c.height);
+        for (let l = 0; l < 4; l++) {
+          ctx.beginPath(); ctx.moveTo(0, c.height);
+          for (let x = 0; x <= c.width; x += 5) {
+            const y = c.height*0.4 + Math.sin(x*0.005+t+l*1.5)*40 + Math.sin(x*0.01+t*1.5+l)*20 + l*30;
+            ctx.lineTo(x, y);
+          }
+          ctx.lineTo(c.width, c.height); ctx.closePath();
+          const colors = ['rgba(30,60,180,0.15)','rgba(80,40,200,0.12)','rgba(20,100,255,0.1)','rgba(100,50,180,0.08)'];
+          ctx.fillStyle = colors[l]; ctx.fill();
+        }
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "渐变/背景类", name: "mesh-gradient", title: "网格渐变", desc: "流动的多色网格渐变", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      const blobs = Array.from({length: 5}, () => ({
+        x: Math.random()*c.width, y: Math.random()*c.height,
+        vx: (Math.random()-.5)*1.5, vy: (Math.random()-.5)*1.5,
+        r: 80+Math.random()*120,
+        color: ['#1e3a8a','#7c3aed','#be185d','#0891b2','#d97706'][Math.floor(Math.random()*5)]
+      }));
+      (function loop() {
+        const t = Date.now()*0.001;
+        ctx.fillStyle = '#0a0a0f'; ctx.fillRect(0,0,c.width,c.height);
+        ctx.globalCompositeOperation = 'lighter';
+        blobs.forEach(b => {
+          b.x += b.vx + Math.sin(t)*0.5; b.y += b.vy + Math.cos(t*0.7)*0.5;
+          if (b.x < -b.r) b.x = c.width+b.r; if (b.x > c.width+b.r) b.x = -b.r;
+          if (b.y < -b.r) b.y = c.height+b.r; if (b.y > c.height+b.r) b.y = -b.r;
+          const g = ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+          g.addColorStop(0, b.color+'40'); g.addColorStop(0.5, b.color+'15'); g.addColorStop(1, 'transparent');
+          ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height);
+        });
+        ctx.globalCompositeOperation = 'source-over';
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  { cat: "渐变/背景类", name: "gradient-orb", title: "渐变光球", desc: "柔和的呼吸渐变光球", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      (function loop() {
+        const t = Date.now()*0.001;
+        ctx.fillStyle = '#0a0a15'; ctx.fillRect(0,0,c.width,c.height);
+        const cx = c.width/2 + Math.sin(t*0.5)*50, cy = c.height/2 + Math.cos(t*0.3)*30;
+        const r = 80 + Math.sin(t)*20;
+        const g = ctx.createRadialGradient(cx,cy,0,cx,cy,r);
+        g.addColorStop(0, 'rgba(59,130,246,0.4)'); g.addColorStop(0.5, 'rgba(139,92,246,0.15)');
+        g.addColorStop(0.8, 'rgba(236,72,153,0.05)'); g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height);
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  // ── 波浪/流体类 ──
+  { cat: "波浪/流体类", name: "wave-layer", title: "多层波浪", desc: "多层 SVG 波浪缓慢起伏", tag: "SVG/CSS",
+    draw: (c) => {
+      c.innerHTML = `
+        <svg viewBox="0 0 400 220" style="position:absolute;inset:0;width:100%;height:100%">
+          <defs><linearGradient id="wg1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1e3a8a" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#0a0a15" stop-opacity="0"/>
+          </linearGradient></defs>
+          <path fill="url(#wg1)" opacity="0.6"><animate attributeName="d" dur="8s" repeatCount="indefinite" values="M0,160 C80,120 160,180 240,140 C320,100 360,150 400,130 L400,220 L0,220Z;M0,140 C80,170 160,120 240,160 C320,130 360,110 400,150 L400,220 L0,220Z;M0,160 C80,120 160,180 240,140 C320,100 360,150 400,130 L400,220 L0,220Z"/></path>
+          <path fill="#1e3a8a" opacity="0.3"><animate attributeName="d" dur="6s" repeatCount="indefinite" values="M0,180 C100,150 200,190 300,160 C350,145 380,170 400,155 L400,220 L0,220Z;M0,160 C100,180 200,140 300,170 C350,165 380,150 400,170 L400,220 L0,220Z;M0,180 C100,150 200,190 300,160 C350,145 380,170 400,155 L400,220 L0,220Z"/></path>
+          <path fill="#3b82f6" opacity="0.15"><animate attributeName="d" dur="10s" repeatCount="indefinite" values="M0,190 C120,170 240,200 360,175 C380,170 395,185 400,180 L400,220 L0,220Z;M0,175 C120,195 240,165 360,185 C380,190 395,175 400,185 L400,220 L0,220Z;M0,190 C120,170 240,200 360,175 C380,170 395,185 400,180 L400,220 L0,220Z"/></path>
+        </svg>`;
+    }},
+
+  { cat: "波浪/流体类", name: "wave-text", title: "波浪文字", desc: "文字逐字上下波动", tag: "CSS",
+    draw: (c) => {
+      const text = '华检科 HubForge';
+      c.innerHTML = '<div style="display:flex;gap:1px;align-items:center;height:100%">' +
+        text.split('').map((ch, i) => `<span style="font-size:20px;font-weight:700;color:#4a9eff;display:inline-block;animation:wave-char 2s ease-in-out ${i*0.08}s infinite">${ch}</span>`).join('') +
+        '</div>';
+      if (!document.getElementById('wave-char-style')) {
+        const s = document.createElement('style'); s.id = 'wave-char-style';
+        s.textContent = '@keyframes wave-char { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  // ── 文字效果类 ──
+  { cat: "文字效果类", name: "typewriter", title: "打字机", desc: "文字逐字打出+光标闪烁", tag: "JS/CSS",
+    draw: (c) => {
+      const texts = ['AI 重塑咨询解决方案', '智能 · 安全 · 高效', '华检科 HubForge'];
+      let ti = 0, ci = 0, deleting = false;
+      c.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%"><span id="tw-text" style="font-size:18px;font-weight:600;color:#4a9eff"></span><span style="width:2px;height:22px;background:#4a9eff;margin-left:2px;animation:blink 1s infinite"></span></div>';
+      if (!document.getElementById('tw-style')) {
+        const s = document.createElement('style'); s.id = 'tw-style';
+        s.textContent = '@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }';
+        document.head.appendChild(s);
+      }
+      const el = () => document.getElementById('tw-text');
+      setInterval(() => {
+        if (!el()) return;
+        if (!deleting) {
+          ci++;
+          el().textContent = texts[ti].slice(0, ci);
+          if (ci >= texts[ti].length) { setTimeout(() => { deleting = true; }, 1500); }
+        } else {
+          ci--;
+          el().textContent = texts[ti].slice(0, ci);
+          if (ci <= 0) { deleting = false; ti = (ti+1) % texts.length; }
+        }
+      }, deleting ? 50 : 100);
+    }},
+
+  { cat: "文字效果类", name: "gradient-text", title: "渐变文字", desc: "文字渐变色流动动画", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%">
+        <span style="font-size:28px;font-weight:800;background:linear-gradient(90deg,#4a9eff,#a855f7,#ec4899,#f59e0b,#4a9eff);background-size:300%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:gradient-flow 4s linear infinite">华检科 HubForge</span></div>`;
+      if (!document.getElementById('gf-style')) {
+        const s = document.createElement('style'); s.id = 'gf-style';
+        s.textContent = '@keyframes gradient-flow { 0%{background-position:0% 50%} 100%{background-position:300% 50%} }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  { cat: "文字效果类", name: "neon-glow", title: "霓虹灯文字", desc: "霓虹灯闪烁发光文字", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#0a0a0f">
+        <span style="font-size:26px;font-weight:700;color:#fff;text-shadow:0 0 7px #4a9eff,0 0 10px #4a9eff,0 0 21px #4a9eff,0 0 42px #2563eb,0 0 82px #2563eb;animation:neon-flicker 3s infinite alternate">HubForge</span></div>`;
+      if (!document.getElementById('neon-style')) {
+        const s = document.createElement('style'); s.id = 'neon-style';
+        s.textContent = '@keyframes neon-flicker { 0%,19%,21%,23%,25%,54%,56%,100%{text-shadow:0 0 7px #4a9eff,0 0 10px #4a9eff,0 0 21px #4a9eff,0 0 42px #2563eb,0 0 82px #2563eb} 20%,24%,55%{text-shadow:none} }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  { cat: "文字效果类", name: "split-reveal", title: "文字展开", desc: "文字从中间向两侧展开", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;overflow:hidden">
+        <div style="display:flex;overflow:hidden"><span style="font-size:24px;font-weight:700;color:#4a9eff;display:inline-block;animation:split-l 1.5s ease-out forwards;transform:translateX(100%);opacity:0">华检科</span>
+        <span style="font-size:24px;font-weight:700;color:#a855f7;display:inline-block;animation:split-r 1.5s ease-out forwards;transform:translateX(-100%);opacity:0;margin-left:8px">HubForge</span></div></div>`;
+      if (!document.getElementById('split-style')) {
+        const s = document.createElement('style'); s.id = 'split-style';
+        s.textContent = '@keyframes split-l{to{transform:translateX(0);opacity:1}} @keyframes split-r{to{transform:translateX(0);opacity:1}}';
+        document.head.appendChild(s);
+      }
+    }},
+
+  // ── 交互效果类 ──
+  { cat: "交互效果类", name: "magnetic-button", title: "磁性按钮", desc: "按钮跟随鼠标磁性吸附", tag: "JS/CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%">
+        <button id="mag-btn" style="padding:14px 32px;background:#1a1a2e;color:#fff;border:1px solid #333;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:transform 0.2s;position:relative">Hover Me</button></div>`;
+      const btn = document.getElementById('mag-btn');
+      const wrap = btn.parentElement;
+      wrap.onmousemove = e => {
+        const r = btn.getBoundingClientRect(), cx = r.left+r.width/2, cy = r.top+r.height/2;
+        const dx = (e.clientX-cx)*0.3, dy = (e.clientY-cy)*0.3;
+        btn.style.transform = `translate(${dx}px,${dy}px) scale(1.05)`;
+        btn.style.boxShadow = `${-dx*0.5}px ${-dy*0.5}px 20px rgba(74,158,255,0.3)`;
+      };
+      wrap.onmouseleave = () => { btn.style.transform = ''; btn.style.boxShadow = ''; };
+    }},
+
+  { cat: "交互效果类", name: "tilt-card", title: "3D 倾斜卡片", desc: "卡片跟随鼠标 3D 倾斜", tag: "JS/CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;perspective:800px">
+        <div id="tilt-card" style="width:200px;height:130px;background:linear-gradient(135deg,#1a1a2e,#2a2a4e);border-radius:12px;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:#4a9eff;cursor:pointer;transition:transform 0.1s;transform-style:preserve-3d">3D Tilt Card</div></div>`;
+      const card = document.getElementById('tilt-card');
+      const wrap = card.parentElement;
+      wrap.onmousemove = e => {
+        const r = card.getBoundingClientRect(), cx = r.left+r.width/2, cy = r.top+r.height/2;
+        const rx = ((e.clientY-cy)/(r.height/2))*-12, ry = ((e.clientX-cx)/(r.width/2))*12;
+        card.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+        card.style.background = `linear-gradient(${135+ry}deg,#1a1a2e,#2a2a4e)`;
+      };
+      wrap.onmouseleave = () => { card.style.transform = ''; card.style.background = ''; };
+    }},
+
+  { cat: "交互效果类", name: "cursor-trail", title: "光标拖尾", desc: "鼠标移动产生彩色拖尾", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d'); const trail = [];
+      c.onmousemove = e => {
+        const r = c.getBoundingClientRect();
+        trail.push({ x: e.clientX-r.left, y: e.clientY-r.top, life: 1, hue: Math.random()*360 });
+        if (trail.length > 50) trail.shift();
+      };
+      (function loop() {
+        ctx.clearRect(0,0,c.width,c.height);
+        trail.forEach((p, i) => {
+          p.life -= 0.02;
+          if (p.life > 0) {
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = `hsl(${p.hue},80%,60%)`;
+            ctx.beginPath(); ctx.arc(p.x,p.y, p.life*6, 0, Math.PI*2); ctx.fill();
+          }
+        });
+        ctx.globalAlpha = 1;
+        trail.splice(0, trail.length, ...trail.filter(p => p.life > 0));
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('移动鼠标', c.width/2, c.height/2);
+        requestAnimationFrame(loop);
+      })();
+    }},
+
+  // ── CSS 骨架效果类 ──
+  { cat: "CSS 效果类", name: "glassmorphism", title: "玻璃拟态", desc: "毛玻璃磨砂效果", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="position:relative;width:100%;height:100%;overflow:hidden;background:linear-gradient(135deg,#1e3a8a,#7c3aed)">
+        <div style="position:absolute;width:120px;height:120px;border-radius:50%;background:#ec4899;top:30px;left:50px;filter:blur(40px)"></div>
+        <div style="position:absolute;width:100px;height:100px;border-radius:50%;background:#4a9eff;bottom:40px;right:60px;filter:blur(40px)"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;padding:24px;background:rgba(255,255,255,0.1);backdrop-filter:blur(20px);border-radius:16px;border:1px solid rgba(255,255,255,0.2);text-align:center">
+          <div style="font-size:16px;font-weight:700;color:#fff">Glassmorphism</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:8px">毛玻璃效果</div>
+        </div></div>`;
+    }},
+
+  { cat: "CSS 效果类", name: "glitch-text", title: "故障文字", desc: "赛博朋克风格故障文字", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;background:#0a0a0f">
+        <span style="font-size:28px;font-weight:800;color:#fff;position:relative;animation:glitch-main 2s infinite">HubForge
+          <span style="position:absolute;left:2px;top:0;color:#ff006c;clip-path:polygon(0 0,100% 0,100% 45%,0 45%);animation:glitch-1 2s infinite">HubForge</span>
+          <span style="position:absolute;left:-2px;top:0;color:#00fff9;clip-path:polygon(0 55%,100% 55%,100% 100%,0 100%);animation:glitch-2 2s infinite">HubForge</span>
+        </span></div>`;
+      if (!document.getElementById('glitch-style')) {
+        const s = document.createElement('style'); s.id = 'glitch-style';
+        s.textContent = `@keyframes glitch-main{0%,100%{transform:translate(0)}20%{transform:translate(-2px,2px)}40%{transform:translate(2px,-2px)}60%{transform:translate(-1px,1px)}80%{transform:translate(1px,-1px)}}
+          @keyframes glitch-1{0%,100%{transform:translate(0)}20%{transform:translate(3px,-1px)}40%{transform:translate(-3px,1px)}60%{transform:translate(2px,2px)}80%{transform:translate(-2px,-2px)}}
+          @keyframes glitch-2{0%,100%{transform:translate(0)}20%{transform:translate(-3px,1px)}40%{transform:translate(3px,-1px)}60%{transform:translate(-2px,-2px)}80%{transform:translate(2px,2px)}}`;
+        document.head.appendChild(s);
+      }
+    }},
+
+  { cat: "CSS 效果类", name: "shimmer-loading", title: "骨架屏闪烁", desc: "加载态骨架屏闪光效果", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="padding:30px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s infinite"></div><div style="flex:1;display:flex;flex-direction:column;gap:8px"><div style="height:12px;width:60%;border-radius:6px;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s 0.1s infinite"></div><div style="height:10px;width:40%;border-radius:6px;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s 0.2s infinite"></div></div></div>
+        <div style="height:80px;border-radius:10px;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s 0.3s infinite"></div>
+        <div style="display:flex;gap:10px"><div style="height:10px;flex:1;border-radius:6px;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s 0.4s infinite"></div><div style="height:10px;flex:1;border-radius:6px;background:linear-gradient(90deg,#1a1a22 25%,#2a2a35 50%,#1a1a22 75%);background-size:200%;animation:shimmer 1.5s 0.5s infinite"></div></div></div>`;
+    }},
+
+  { cat: "CSS 效果类", name: "ripple-button", title: "涟漪按钮", desc: "点击按钮产生涟漪扩散", tag: "CSS/JS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%">
+        <button id="ripple-btn" style="position:relative;padding:14px 36px;background:#1a1a2e;color:#fff;border:1px solid #333;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;overflow:hidden">点击涟漪</button></div>`;
+      document.getElementById('ripple-btn').onclick = e => {
+        const btn = e.target, r = btn.getBoundingClientRect();
+        const span = document.createElement('span');
+        Object.assign(span.style, {
+          position: 'absolute', left: (e.clientX-r.left)+'px', top: (e.clientY-r.top)+'px',
+          width: '0', height: '0', borderRadius: '50%', background: 'rgba(74,158,255,0.4)',
+          transform: 'translate(-50%,-50%)', animation: 'ripple-expand 0.6s ease-out forwards', pointerEvents: 'none'
+        });
+        btn.appendChild(span);
+        setTimeout(() => span.remove(), 600);
+      };
+      if (!document.getElementById('ripple-style')) {
+        const s = document.createElement('style'); s.id = 'ripple-style';
+        s.textContent = '@keyframes ripple-expand { to { width: 300px; height: 300px; opacity: 0; } }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  { cat: "CSS 效果类", name: "counter-animate", title: "数字滚动", desc: "数字从 0 滚动到目标值", tag: "JS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;gap:30px">
+        <div style="text-align:center"><div id="cnt1" style="font-size:36px;font-weight:800;color:#4a9eff">0</div><div style="font-size:11px;color:#666;margin-top:4px">应用数</div></div>
+        <div style="text-align:center"><div id="cnt2" style="font-size:36px;font-weight:800;color:#a855f7">0</div><div style="font-size:11px;color:#666;margin-top:4px">用户数</div></div>
+        <div style="text-align:center"><div id="cnt3" style="font-size:36px;font-weight:800;color:#ec4899">0</div><div style="font-size:11px;color:#666;margin-top:4px">租户数</div></div></div>`;
+      const targets = [128, 3650, 42];
+      const els = [document.getElementById('cnt1'), document.getElementById('cnt2'), document.getElementById('cnt3')];
+      let start = null;
+      function anim(ts) {
+        if (!start) start = ts;
+        const p = Math.min((ts - start) / 2000, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        els.forEach((el, i) => { if (el) el.textContent = Math.floor(targets[i] * ease).toLocaleString(); });
+        if (p < 1) requestAnimationFrame(anim);
+      }
+      setTimeout(() => requestAnimationFrame(anim), 300);
+    }},
+
+  // ── 3D/几何类 ──
+  { cat: "3D/几何类", name: "rotating-cube", title: "旋转立方体", desc: "CSS 3D 线框立方体旋转", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;perspective:600px">
+        <div style="width:80px;height:80px;transform-style:preserve-3d;animation:cube-spin 8s linear infinite">
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:translateZ(40px)"></div>
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:rotateY(90deg) translateZ(40px)"></div>
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:rotateY(180deg) translateZ(40px)"></div>
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:rotateY(270deg) translateZ(40px)"></div>
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:rotateX(90deg) translateZ(40px)"></div>
+          <div style="position:absolute;width:80px;height:80px;border:2px solid rgba(74,158,255,0.4);transform:rotateX(270deg) translateZ(40px)"></div>
+        </div></div>`;
+      if (!document.getElementById('cube-style')) {
+        const s = document.createElement('style'); s.id = 'cube-style';
+        s.textContent = '@keyframes cube-spin { from{transform:rotateX(0)rotateY(0)} to{transform:rotateX(360deg)rotateY(360deg)} }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  { cat: "3D/几何类", name: "orbit-rings", title: "轨道环", desc: "多层轨道环绕动画", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;perspective:500px">
+        <div style="position:relative;width:160px;height:160px;transform-style:preserve-3d;transform:rotateX(60deg)">
+          <div style="position:absolute;inset:0;border:1.5px solid rgba(74,158,255,0.3);border-radius:50%;animation:orbit 4s linear infinite"><div style="position:absolute;width:6px;height:6px;background:#4a9eff;border-radius:50%;top:-3px;left:50%;transform:translateX(-50%)"></div></div>
+          <div style="position:absolute;inset:15px;border:1.5px solid rgba(168,85,247,0.3);border-radius:50%;animation:orbit 3s linear infinite reverse"><div style="position:absolute;width:5px;height:5px;background:#a855f7;border-radius:50%;top:-2.5px;left:50%;transform:translateX(-50%)"></div></div>
+          <div style="position:absolute;inset:30px;border:1.5px solid rgba(236,72,153,0.3);border-radius:50%;animation:orbit 2s linear infinite"><div style="position:absolute;width:4px;height:4px;background:#ec4899;border-radius:50%;top:-2px;left:50%;transform:translateX(-50%)"></div></div>
+          <div style="position:absolute;width:10px;height:10px;background:#4a9eff;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%)"></div>
+        </div></div>`;
+      if (!document.getElementById('orbit-style')) {
+        const s = document.createElement('style'); s.id = 'orbit-style';
+        s.textContent = '@keyframes orbit { from{transform:rotate(0)} to{transform:rotate(360deg)} }';
+        document.head.appendChild(s);
+      }
+    }},
+
+  // ── 进度/状态类 ──
+  { cat: "进度/状态类", name: "progress-ring", title: "进度环", desc: "SVG 圆形进度条动画", tag: "SVG",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;gap:24px">
+        <svg width="70" height="70" viewBox="0 0 70 70"><circle cx="35" cy="35" r="30" fill="none" stroke="#1a1a22" stroke-width="5"/><circle cx="35" cy="35" r="30" fill="none" stroke="#4a9eff" stroke-width="5" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5" transform="rotate(-90 35 35)"><animate attributeName="stroke-dashoffset" from="188.5" to="37.7" dur="2s" fill="freeze" repeatCount="indefinite"/><text x="35" y="38" text-anchor="middle" fill="#4a9eff" font-size="14" font-weight="700">80%</text></circle></svg>
+        <svg width="70" height="70" viewBox="0 0 70 70"><circle cx="35" cy="35" r="30" fill="none" stroke="#1a1a22" stroke-width="5"/><circle cx="35" cy="35" r="30" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5" transform="rotate(-90 35 35)"><animate attributeName="stroke-dashoffset" from="188.5" to="94.25" dur="2s" fill="freeze" repeatCount="indefinite"/></circle></svg>
+        <svg width="70" height="70" viewBox="0 0 70 70"><circle cx="35" cy="35" r="30" fill="none" stroke="#1a1a22" stroke-width="5"/><circle cx="35" cy="35" r="30" fill="none" stroke="#ec4899" stroke-width="5" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5" transform="rotate(-90 35 35)"><animate attributeName="stroke-dashoffset" from="188.5" to="141.4" dur="2s" fill="freeze" repeatCount="indefinite"/></circle></svg></div>`;
+    }},
+
+  { cat: "进度/状态类", name: "loading-spinner", title: "创意加载", desc: "多点旋转加载动画", tag: "CSS",
+    draw: (c) => {
+      c.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;gap:40px">
+        <div style="position:relative;width:40px;height:40px">${Array.from({length:8}, (_,i) => `<div style="position:absolute;width:8px;height:8px;border-radius:50%;background:#4a9eff;top:50%;left:50%;transform:translate(-50%,-50%) rotate(${i*45}deg) translateY(-16px);opacity:${1-i*0.1};animation:dot-pulse 1.2s ${i*0.15}s ease-in-out infinite"></div>`).join('')}</div>
+        <div style="width:40px;height:40px;border:3px solid transparent;border-top-color:#4a9eff;border-right-color:#a855f7;border-radius:50%;animation:spin 1s linear infinite"></div>
+        <div style="display:flex;gap:5px;align-items:center">${Array.from({length:3}, (_,i) => `<div style="width:10px;height:10px;border-radius:50%;background:#ec4899;animation:bounce-dot 1.4s ${i*0.2}s ease-in-out infinite both"></div>`).join('')}</div></div>`;
+      if (!document.getElementById('spin-style')) {
+        const s = document.createElement('style'); s.id = 'spin-style';
+        s.textContent = '@keyframes dot-pulse{0%,100%{transform:translate(-50%,-50%) rotate(var(--r)) translateY(-16px) scale(1)}50%{transform:translate(-50%,-50%) rotate(var(--r)) translateY(-16px) scale(0.5)}} @keyframes bounce-dot{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-16px)}}';
+        document.head.appendChild(s);
+      }
+    }},
+
+  // ── 粒子图标（当前项目用的）──
+  { cat: "粒子图标类", name: "particle-icon-network", title: "粒子图标-网络", desc: "粒子沿轮廓组成图标（当前登录页用）", tag: "Canvas",
+    draw: (c) => {
+      const ctx = c.getContext('2d');
+      function getHelmetPts(cx,cy,s){const p=[];for(let a=Math.PI*1.1;a>=-Math.PI*.1;a-=.08)p.push({x:cx+Math.cos(a)*26*s,y:cy-6*s+Math.sin(a)*-20*s});for(let x=-30;x<=30;x+=2.5)p.push({x:cx+x*s,y:cy+14*s});for(let a=0;a<=Math.PI;a+=.15)p.push({x:cx+Math.cos(a)*32*s,y:cy+14*s+Math.sin(a)*4*s});return p}
+      function getShieldPts(cx,cy,s){const p=[];for(let a=Math.PI*1.15;a>=-Math.PI*.15;a-=.1)p.push({x:cx+Math.cos(a)*22*s,y:cy-8*s+Math.sin(a)*-18*s});for(let t=0;t<=1;t+=.06)p.push({x:cx+22*s+t*-22*s,y:cy-8*s+18*s+t*25*s});for(let t=0;t<=1;t+=.06)p.push({x:cx-22*s+t*22*s,y:cy-8*s+18*s+t*25*s});return p}
+      const icons = [
+        {pts: getHelmetPts(c.width*0.3, c.height*0.5, 1.4), color:'rgba(100,180,255,0.7)', glow:'rgba(100,180,255,0.15)'},
+        {pts: getShieldPts(c.width*0.7, c.height*0.5, 1.4), color:'rgba(255,255,255,0.65)', glow:'rgba(100,200,255,0.12)'}
+      ];
+      const data = icons.map(ic => ic.pts.map(p => ({x:p.x,y:p.y,r:.4+Math.random()*.8,ph:Math.random()*Math.PI*2,sp:.5+Math.random()})));
+      (function loop(){
+        ctx.clearRect(0,0,c.width,c.height); const t=Date.now()*.001;
+        icons.forEach((ic,idx)=>{
+          const dx=Math.sin(t*.4+idx)*6, dy=Math.cos(t*.3+idx)*8;
+          data[idx].forEach(p=>{
+            const a=.4+.5*Math.sin(t*p.sp+p.ph), x=p.x+dx, y=p.y+dy, r=p.r*(.8+.2*Math.sin(t*1.5+p.ph));
+            ctx.globalAlpha=a*.4;const g=ctx.createRadialGradient(x,y,0,x,y,r*3);
+            g.addColorStop(0,ic.glow);g.addColorStop(1,'transparent');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*3,0,Math.PI*2);ctx.fill();
+            ctx.globalAlpha=a;ctx.fillStyle=ic.color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+          });
+        });ctx.globalAlpha=1;requestAnimationFrame(loop);
+      })();
+    }},
+];
+
+// ═══════════════════════════════════════════════════════
+// 渲染页面
+// ═══════════════════════════════════════════════════════
+const grid = document.getElementById('grid');
+let lastCat = '';
+effects.forEach((ef, idx) => {
+  if (ef.cat !== lastCat) {
+    lastCat = ef.cat;
+    const catEl = document.createElement('div');
+    catEl.className = 'cat-title';
+    catEl.textContent = ef.cat;
+    grid.appendChild(catEl);
+  }
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `<div class="card-head"><h3>${ef.title}</h3><span class="tag">${ef.tag}</span></div><div class="card-demo" id="demo-${idx}"></div><div class="card-foot">名称: <code style="color:#4a9eff;cursor:pointer" onclick="navigator.clipboard.writeText('${ef.name}');this.textContent='已复制 ✓';setTimeout(()=>this.textContent='${ef.name}',1500)">${ef.name}</code> — ${ef.desc}</div>`;
+  grid.appendChild(card);
+  // 延迟初始化，避免同时渲染卡顿
+  setTimeout(() => {
+    const demo = document.getElementById(`demo-${idx}`);
+    if (!demo) return;
+    if (ef.tag === 'Canvas' || ef.tag === 'SVG') {
+      const canvas = document.createElement('canvas');
+      canvas.width = demo.offsetWidth * 2;
+      canvas.height = demo.offsetHeight * 2;
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      demo.appendChild(canvas);
+      ef.draw(canvas);
+    } else {
+      ef.draw(demo);
+    }
+  }, idx * 100);
+});
+</script>
+</body>
+</html>

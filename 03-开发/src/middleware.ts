@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME, type TokenPayload } from "@/lib/auth";
 
-/** 不需要认证的公开路径 */
+/** 不需要认证的公开路径（前缀匹配） */
 const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/auth/forgot-password",
@@ -19,6 +19,9 @@ const PUBLIC_PATHS = [
   "/reset-password",
 ];
 
+/** 不需要认证的公开路径（精确匹配） */
+const PUBLIC_PATHS_EXACT = ["/", "/about"];
+
 /** 需要主租户管理员权限的路径（owner 角色） */
 const OWNER_PATHS = ["/api/tenants", "/admin/tenants"];
 
@@ -26,7 +29,8 @@ const OWNER_PATHS = ["/api/tenants", "/admin/tenants"];
  * 检查路径是否匹配公开路由
  */
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some((path) => pathname.startsWith(path));
+  return PUBLIC_PATHS_EXACT.includes(pathname) || 
+         PUBLIC_PATHS.some((path) => pathname.startsWith(path));
 }
 
 /**

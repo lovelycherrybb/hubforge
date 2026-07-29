@@ -7,12 +7,12 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-[#fafafa] flex items-center justify-center px-6">
       <div className="w-full max-w-sm text-center">
         <div className="mb-6">
-          <div className="flex items-center justify-center gap-2.5 mb-8">
-            <span className="w-7 h-7 rounded bg-[#1a1a2e] flex items-center justify-center">
-              <span className="text-white text-xs font-bold">H</span>
-            </span>
-            <span className="font-bold text-[#1a1a2e] tracking-tight">HubForge</span>
-          </div>
+          <Link href="/" className="flex items-center justify-center gap-2.5 mb-8">
+            <img src="/logo.png" alt="华检科" className="w-8 h-8 rounded object-cover" />
+            <div className="flex flex-col">
+              <span className="font-bold text-[#1a1a2e] tracking-tight">华检科 HubForge</span>
+            </div>
+          </Link>
         </div>
 
         <div className="p-6 rounded-lg border border-gray-200 bg-white mb-6">

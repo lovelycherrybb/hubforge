@@ -534,7 +534,11 @@ describe('GET /api/permissions — 权限列表', () => {
       },
     ];
 
-    mockPrisma.permission.findMany.mockResolvedValue(permissions);
+    // 非 owner 用户：app 权限走 permission.findMany，框架权限走 tenantPermission.findMany
+    mockPrisma.permission.findMany.mockResolvedValue([permissions[1]]);
+    mockPrisma.tenantPermission.findMany.mockResolvedValue([
+      { permission: permissions[0] },
+    ]);
 
     const { GET } = await import('@/app/api/permissions/route');
 

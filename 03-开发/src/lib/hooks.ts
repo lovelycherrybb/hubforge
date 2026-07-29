@@ -13,7 +13,7 @@ interface User {
   role?: "owner" | "admin" | "member";
   tenant?: { id: string; name: string; slug: string; logoUrl?: string | null };
   department?: { id: string; name: string } | null;
-  permissions?: { key: string; label: string; type?: string }[];
+  permissions?: { permissionId?: string; key: string; label: string; type?: string }[];
   status?: string;
 }
 

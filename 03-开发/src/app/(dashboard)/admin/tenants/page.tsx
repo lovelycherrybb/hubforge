@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { Modal } from "@/components/Modal";
 import { Badge } from "@/components/Badge";
 import {
   Table,
@@ -19,9 +20,9 @@ interface Tenant {
   name: string;
   slug: string;
   status: string;
-  quotaUsers: number;
-  quotaApps: number;
-  quotaOrgLevels: number;
+  maxUsers: number;
+  maxApps: number;
+  maxOrgLevels: number;
   _count?: { users: number; tenantApps: number };
 }
 
@@ -59,6 +60,11 @@ export default function TenantsPage() {
   const [activeTenant, setActiveTenant] = useState<Tenant | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "users" | "apps" | "danger">("info");
 
+  // 新增租户
+  const [showCreate, setShowCreate] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", slug: "", adminEmail: "", adminName: "" });
+  const [creating, setCreating] = useState(false);
+
   // 应用配置
   const [allApps, setAllApps] = useState<App[]>([]);
   const [tenantApps, setTenantApps] = useState<TenantApp[]>([]);
@@ -81,7 +87,7 @@ export default function TenantsPage() {
 
   // 配额编辑
   const [editingQuota, setEditingQuota] = useState(false);
-  const [quotaForm, setQuotaForm] = useState({ quotaUsers: 100, quotaApps: 50, quotaOrgLevels: 5 });
+  const [quotaForm, setQuotaForm] = useState({ maxUsers: 100, maxApps: 50, maxOrgLevels: 5 });
 
   const fetchTenants = async () => {
     try {
@@ -96,12 +102,30 @@ export default function TenantsPage() {
 
   useEffect(() => { fetchTenants(); }, []);
 
+  // 新增租户
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    setError("");
+    try {
+      await api.post("/api/tenants", createForm);
+      setShowCreate(false);
+      setCreateForm({ name: "", slug: "", adminEmail: "", adminName: "" });
+      fetchTenants();
+    } catch (err: unknown) {
+      const apiErr = err as { error?: string };
+      setError(apiErr.error || "创建失败，再试一次？");
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // 打开租户操作面板
   const openTenant = async (tenant: Tenant) => {
     setActiveTenant(tenant);
     setActiveTab("info");
     setEditingQuota(false);
-    setQuotaForm({ quotaUsers: tenant.quotaUsers, quotaApps: tenant.quotaApps, quotaOrgLevels: tenant.quotaOrgLevels });
+    setQuotaForm({ maxUsers: tenant.maxUsers, maxApps: tenant.maxApps, maxOrgLevels: tenant.maxOrgLevels });
     setAppSearch("");
     setAppFilter("all");
     setShowAddUser(false);
@@ -258,6 +282,7 @@ export default function TenantsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-[#333]">租户管理</h1>
+        <Button onClick={() => { setShowCreate(true); setError(""); }}>+ 新增租户</Button>
       </div>
 
       {error && (
@@ -291,7 +316,12 @@ export default function TenantsPage() {
             <TableBody>
               {tenants.map((t) => (
                 <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {t.name}
+                    {t.slug === "main" && (
+                      <Badge variant="info" className="ml-2">主租户</Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-gray-400 text-sm font-mono">{t.slug}</TableCell>
                   <TableCell>
                     <Badge variant={t.status === "active" ? "success" : "danger"}>
@@ -408,20 +438,20 @@ export default function TenantsPage() {
                         <Input
                           label="用户上限"
                           type="number"
-                          value={String(quotaForm.quotaUsers)}
-                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaUsers: Number(e.target.value) })}
+                          value={String(quotaForm.maxUsers)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, maxUsers: Number(e.target.value) })}
                         />
                         <Input
                           label="应用上限"
                           type="number"
-                          value={String(quotaForm.quotaApps)}
-                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaApps: Number(e.target.value) })}
+                          value={String(quotaForm.maxApps)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, maxApps: Number(e.target.value) })}
                         />
                         <Input
                           label="组织层级上限"
                           type="number"
-                          value={String(quotaForm.quotaOrgLevels)}
-                          onChange={(e) => setQuotaForm({ ...quotaForm, quotaOrgLevels: Number(e.target.value) })}
+                          value={String(quotaForm.maxOrgLevels)}
+                          onChange={(e) => setQuotaForm({ ...quotaForm, maxOrgLevels: Number(e.target.value) })}
                         />
                         <div className="flex gap-2">
                           <Button size="sm" onClick={saveQuota}>保存</Button>
@@ -432,15 +462,15 @@ export default function TenantsPage() {
                       <div className="space-y-2">
                         <div className="flex justify-between py-2 border-b border-gray-100">
                           <span className="text-sm text-gray-500">用户上限</span>
-                          <span className="text-sm">{activeTenant.quotaUsers}</span>
+                          <span className="text-sm">{activeTenant.maxUsers}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-gray-100">
                           <span className="text-sm text-gray-500">应用上限</span>
-                          <span className="text-sm">{activeTenant.quotaApps}</span>
+                          <span className="text-sm">{activeTenant.maxApps}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-gray-100">
                           <span className="text-sm text-gray-500">组织层级上限</span>
-                          <span className="text-sm">{activeTenant.quotaOrgLevels}</span>
+                          <span className="text-sm">{activeTenant.maxOrgLevels}</span>
                         </div>
                       </div>
                     )}
@@ -698,6 +728,56 @@ export default function TenantsPage() {
           </div>
         </div>
       )}
+      {/* ===== 新增租户 Modal ===== */}
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="新增租户"
+        size="lg"
+        formId="create-tenant-form"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>取消</Button>
+            <Button type="submit" form="create-tenant-form" loading={creating}>创建</Button>
+          </>
+        }
+      >
+        <form id="create-tenant-form" onSubmit={handleCreate} className="space-y-4">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-[#e94560]">
+              {error}
+            </div>
+          )}
+          <Input
+            label="租户名称"
+            value={createForm.name}
+            onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+            placeholder="XX公司"
+            required
+          />
+          <Input
+            label="租户标识（slug）"
+            value={createForm.slug}
+            onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })}
+            placeholder="xx-company"
+            required
+          />
+          <Input
+            label="管理员邮箱"
+            type="email"
+            value={createForm.adminEmail}
+            onChange={(e) => setCreateForm({ ...createForm, adminEmail: e.target.value })}
+            placeholder="admin@xx.com"
+            required
+          />
+          <Input
+            label="管理员姓名"
+            value={createForm.adminName}
+            onChange={(e) => setCreateForm({ ...createForm, adminName: e.target.value })}
+            placeholder="张三"
+          />
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -16,9 +16,9 @@ const createTenantSchema = z.object({
   name: z.string().min(2).max(100),
   slug: z
     .string()
-    .min(2)
+    .min(2, "标识至少2个字符")
     .max(50)
-    .regex(/^[a-z0-9-]+$/),
+    .regex(/^[a-z0-9-]+$/, "标识只能用小写字母、数字和连字符"),
   maxUsers: z.number().int().min(1).default(100),
   maxApps: z.number().int().min(1).default(50),
   maxOrgLevels: z.number().int().min(1).default(5),
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         tenantId: tenant.id,
         passwordHash,
         role: "owner",
-        status: "invited",
+        status: "active",
       },
     });
 

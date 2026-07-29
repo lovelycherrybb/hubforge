@@ -107,6 +107,7 @@ export async function GET(
           isPrimary: uo.isPrimary,
         })),
         permissions: permissions.map((up) => ({
+          permissionId: up.permissionId,
           key: up.permission.key,
           label: up.permission.label,
           type: up.permission.type,

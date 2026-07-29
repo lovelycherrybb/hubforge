@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { ParticleBackground } from "@/components/ParticleBackground";
-import { ParticleIcons } from "@/components/ParticleIcons";
 import { api } from "@/lib/api";
 
 type TenantInfo = {
@@ -20,7 +19,7 @@ type TenantInfo = {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawRedirect = searchParams.get("redirect") || "/";
+  const rawRedirect = searchParams.get("redirect") || "/dashboard";
   const redirect =
     rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")
       ? rawRedirect
@@ -275,21 +274,19 @@ export default function LoginPage() {
       {/* Left side - brand area with particle animation */}
       <div className="hidden lg:flex lg:w-2/5 relative flex-col justify-between p-10 bg-[#1a1a2e]">
         <ParticleBackground />
-        <ParticleIcons />
         <div className="relative z-10 flex items-center gap-3">
-          <img
-            src="/logo.png"
-            alt="华检科"
-            className="w-9 h-9 rounded object-cover"
-          />
-          <div className="flex flex-col">
-            <span className="text-white font-bold text-lg tracking-tight">
-              华检科 HubForge
-            </span>
-            <span className="text-white/50 text-xs">
-              AI 重塑咨询解决方案
-            </span>
-          </div>
+          <Link href="/" className="flex items-center gap-3 group">
+            <img
+              src="/logo.png"
+              alt="华检科"
+              className="w-9 h-9 rounded object-cover"
+            />
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-lg tracking-tight">
+                华检科 HubForge
+              </span>
+            </div>
+          </Link>
         </div>
         <div className="relative z-10">
           <div className="text-white/20 text-xs">
@@ -303,7 +300,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
-            <div className="flex items-center gap-2.5">
+            <Link href="/" className="flex items-center gap-2.5">
               <img
                 src="/logo.png"
                 alt="华检科"
@@ -313,11 +310,8 @@ export default function LoginPage() {
                 <span className="font-bold text-[#1a1a2e] tracking-tight">
                   华检科 HubForge
                 </span>
-                <span className="text-xs text-gray-400">
-                  AI 重塑咨询解决方案
-                </span>
               </div>
-            </div>
+            </Link>
           </div>
 
           <h1 className="text-2xl font-bold text-[#333] mb-8">登录</h1>

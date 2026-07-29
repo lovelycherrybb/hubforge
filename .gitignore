@@ -19,3 +19,12 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# 本地文档
+*-checklist.md
+*.ppt
+*.pptx
+04-运营/*.zip
+deploy/standalone/ssl/
+**/ssl_cert/
+**/ssl/

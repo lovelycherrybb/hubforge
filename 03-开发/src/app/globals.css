@@ -62,3 +62,8 @@
 .animate-float-slow-reverse { animation: float-slow-reverse 25s ease-in-out infinite; }
 .animate-float-medium { animation: float-medium 16s ease-in-out infinite; }
 .animate-float-medium-reverse { animation: float-medium-reverse 18s ease-in-out infinite; }
+
+@keyframes gradient-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
