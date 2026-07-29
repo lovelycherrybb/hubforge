@@ -75,6 +75,12 @@ export async function middleware(request: NextRequest) {
   // 2. 认证中间件 - 解析 JWT
   const tokenPayload = await extractToken(request);
 
+  // 已登录用户访问登录/注册/忘记密码页 → 重定向到首页
+  const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
+  if (tokenPayload && AUTH_PAGES.includes(pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
   // API 路由：未认证返回 401
   if (pathname.startsWith("/api/") && !tokenPayload) {
     return NextResponse.json(

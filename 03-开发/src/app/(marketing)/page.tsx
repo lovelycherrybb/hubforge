@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 // ── 导航栏 ──────────────────────────────────────────
 function NavBar() {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -21,14 +22,15 @@ function NavBar() {
           : "bg-transparent"
       }`}
     >
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center gap-8">
-        <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <img src="/logo.png" alt="华检科" className="w-8 h-8 rounded object-cover" />
-          <span className="font-bold text-white tracking-tight">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center gap-4 md:gap-8">
+        <Link href="/" className="flex items-center gap-2 shrink-0">
+          <img src="/logo.png" alt="华检科" className="w-7 h-7 md:w-8 md:h-8 rounded object-cover" />
+          <span className="font-bold text-white text-sm md:text-base tracking-tight">
             华检科 HubForge
           </span>
         </Link>
 
+        {/* PC端导航 */}
         <div className="hidden md:flex items-center gap-6">
           <a
             href="#products"
@@ -59,8 +61,51 @@ function NavBar() {
           >
             登录
           </Link>
+          {/* 汉堡菜单按钮 */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="md:hidden p-2 text-gray-400 hover:text-white"
+            aria-label="菜单"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mobileOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {/* 移动端展开菜单 */}
+      {mobileOpen && (
+        <div className="md:hidden bg-[#0a0a15]/95 backdrop-blur-md border-t border-white/5">
+          <div className="px-6 py-4 space-y-4">
+            <a
+              href="#products"
+              onClick={() => setMobileOpen(false)}
+              className="block text-sm text-gray-300 hover:text-white"
+            >
+              产品
+            </a>
+            <a
+              href="#solutions"
+              onClick={() => setMobileOpen(false)}
+              className="block text-sm text-gray-300 hover:text-white"
+            >
+              解决方案
+            </a>
+            <Link
+              href="/about"
+              onClick={() => setMobileOpen(false)}
+              className="block text-sm text-gray-300 hover:text-white"
+            >
+              关于我们
+            </Link>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
@@ -214,8 +259,8 @@ function HeroSection() {
         ref={canvasRef}
         className="absolute inset-0 pointer-events-none"
       />
-      <div className="relative z-10 text-center px-6 max-w-3xl mx-auto">
-        <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold leading-tight mb-6">
+      <div className="relative z-10 text-center px-4 md:px-6 max-w-3xl mx-auto">
+        <h1 className="text-4xl md:text-5xl lg:text-7xl font-bold leading-tight mb-6">
           <span
             className="bg-clip-text text-transparent"
             style={{
@@ -228,7 +273,7 @@ function HeroSection() {
             华检科 HubForge
           </span>
         </h1>
-        <p className="text-lg md:text-xl text-gray-400 mb-10 max-w-xl mx-auto">
+        <p className="text-base md:text-lg lg:text-xl text-gray-400 mb-10 max-w-xl mx-auto">
           质量安全领域的AI应用门户。一站式管理检测、监测、巡检、报告全流程。
         </p>
       </div>
