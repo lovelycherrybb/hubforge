@@ -274,7 +274,7 @@ function HeroSection() {
           </span>
         </h1>
         <p className="text-base md:text-lg lg:text-xl text-gray-400 mb-10 max-w-xl mx-auto">
-          质量安全领域的AI应用门户。一站式管理检测、监测、巡检、报告全流程。
+          质量安全领域的AI应用门户
         </p>
       </div>
     </section>
@@ -284,8 +284,8 @@ function HeroSection() {
 // ── 数据背书 ──────────────────────────────────────
 function StatsSection() {
   return (
-    <section className="py-16 border-y border-white/5">
-      <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
+    <section className="py-12 md:py-16 border-y border-white/5">
+      <div className="max-w-5xl mx-auto px-4 md:px-6 grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
         {[
           { num: "200+", label: "服务企业" },
           { num: "50万+", label: "检测报告/年" },
@@ -293,10 +293,10 @@ function StatsSection() {
           { num: "CMA/CNAS", label: "双重认证" },
         ].map((s) => (
           <div key={s.label} className="text-center">
-            <div className="text-3xl md:text-4xl font-bold text-[#4a9eff] mb-2">
+            <div className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#4a9eff] mb-2">
               {s.num}
             </div>
-            <div className="text-sm text-gray-500">{s.label}</div>
+            <div className="text-xs md:text-sm text-gray-500">{s.label}</div>
           </div>
         ))}
       </div>
@@ -346,21 +346,21 @@ function ProductsSection() {
   ];
 
   return (
-    <section id="products" className="py-24">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+    <section id="products" className="py-16 md:py-24">
+      <div className="max-w-6xl mx-auto px-4 md:px-6">
+        <div className="text-center mb-12 md:mb-16">
+          <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-4">
             AI 产品矩阵
           </h2>
-          <p className="text-gray-400 max-w-xl mx-auto">
+          <p className="text-sm md:text-base text-gray-400 max-w-xl mx-auto">
             以下是部分 AI 产品示例，更多产品持续上线中
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           {products.map((p) => (
             <div
               key={p.title}
-              className="p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:border-[#4a9eff]/30 hover:bg-white/[0.04] transition-all"
+              className="p-4 md:p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:border-[#4a9eff]/30 hover:bg-white/[0.04] transition-all"
             >
               <h3 className="text-lg font-semibold text-white mb-2">
                 {p.title}
@@ -398,9 +398,9 @@ function WhySection() {
   ];
 
   return (
-    <section className="py-24 border-y border-white/5">
-      <div className="max-w-5xl mx-auto px-6">
-        <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-16">
+    <section className="py-16 md:py-24 border-y border-white/5">
+      <div className="max-w-5xl mx-auto px-4 md:px-6">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white text-center mb-12 md:mb-16">
           为什么选择 HubForge
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -449,9 +449,9 @@ function SolutionsSection() {
   ];
 
   return (
-    <section id="solutions" className="py-24">
-      <div className="max-w-5xl mx-auto px-6">
-        <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-16">
+    <section id="solutions" className="py-16 md:py-24">
+      <div className="max-w-5xl mx-auto px-4 md:px-6">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white text-center mb-12 md:mb-16">
           行业解决方案
         </h2>
         <div className="flex justify-center gap-2 mb-12 flex-wrap">
@@ -496,9 +496,9 @@ function SolutionsSection() {
 // ── CTA ──────────────────────────────────────────
 function CTASection() {
   return (
-    <section className="py-24 border-y border-white/5">
-      <div className="max-w-2xl mx-auto px-6 text-center">
-        <h2 className="text-3xl md:text-4xl font-bold text-white mb-6">
+    <section className="py-16 md:py-24 border-y border-white/5">
+      <div className="max-w-2xl mx-auto px-4 md:px-6 text-center">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-6">
           让 AI 为你的检测业务赋能
         </h2>
         <p className="text-gray-400 mb-10">
@@ -512,9 +512,9 @@ function CTASection() {
 // ── Footer ──────────────────────────────────────
 function Footer() {
   return (
-    <footer className="py-16">
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+    <footer className="py-12 md:py-16">
+      <div className="max-w-6xl mx-auto px-4 md:px-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12 mb-12">
           <div>
             <div className="flex items-center gap-2 mb-4">
               <img src="/logo.png" alt="华检科" className="w-7 h-7 rounded object-cover" />

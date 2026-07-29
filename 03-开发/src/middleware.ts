@@ -54,7 +54,7 @@ async function extractToken(
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. 静态资源和公开路径直接放行
+  // 1. 静态资源直接放行
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
@@ -66,8 +66,7 @@ export async function middleware(request: NextRequest) {
     pathname.endsWith(".ico") ||
     pathname.endsWith(".js") ||
     pathname.endsWith(".css") ||
-    pathname.startsWith("/sdk/") ||
-    isPublicPath(pathname)
+    pathname.startsWith("/sdk/")
   ) {
     return NextResponse.next();
   }
@@ -75,10 +74,15 @@ export async function middleware(request: NextRequest) {
   // 2. 认证中间件 - 解析 JWT
   const tokenPayload = await extractToken(request);
 
-  // 已登录用户访问登录/注册/忘记密码页 → 重定向到首页
+  // 已登录用户访问登录/注册/忘记密码页 → 重定向到工作台
   const AUTH_PAGES = ["/login", "/register", "/forgot-password"];
   if (tokenPayload && AUTH_PAGES.includes(pathname)) {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // 3. 公开路径放行（无需认证）
+  if (isPublicPath(pathname)) {
+    return NextResponse.next();
   }
 
   // API 路由：未认证返回 401
