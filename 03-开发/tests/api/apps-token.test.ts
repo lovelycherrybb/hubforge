@@ -3,24 +3,34 @@
 // 测试 /api/apps/:id/token、/api/apps/verify-token、/api/apps/:id/register-permissions
 // ============================================================
 
-import { describe, it, expect, vi } from 'vitest';
-import { mockPrisma, createAuthToken } from '../setup';
+import { describe, it, expect } from 'vitest';
+import { mockPrisma, mockPgClient, createAuthToken } from '../setup';
+
+/** 创建 pg 查询结果 */
+const R = (rows: any[], command = 'SELECT') => ({
+  rows, rowCount: rows.length, command, oid: 0, fields: [],
+});
 
 // ============================================================
-// GET /api/apps/:id/token — 签发应用 Token
+// GET /api/apps/:id/token — 签发应用 Token（已迁移 pg raw SQL）
 // ============================================================
 describe('GET /api/apps/:id/token — 签发应用 Token', () => {
   it('已登录用户 + 有权访问应用 → 返回 Token', async () => {
     const token = await createAuthToken('user-001', 'tenant-001', true);
 
-    mockPrisma.app.findUnique.mockResolvedValue({
-      id: 'app-001',
-      slug: 'dashboard',
-      tenantId: 'tenant-001',
-      config: { theme: 'dark' },
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 查找应用
+      if (s.includes('FROM APPS') && s.includes('WHERE'))
+        return R([{ id: 'app-001', slug: 'dashboard', tenantId: 'tenant-001', config: { theme: 'dark' } }]);
+      // owner 跳过权限检查，直接查应用级权限
+      if (s.includes('FROM PERMISSIONS') && s.includes('INNER JOIN') && s.includes('USER_PERMISSIONS'))
+        return R([]);
+      // 查找用户
+      if (s.includes('FROM USERS') && s.includes('WHERE'))
+        return R([{ name: '张三', email: 'z@test.com' }]);
+      return R([]);
     });
-    mockPrisma.permission.findMany.mockResolvedValue([]);
-    mockPrisma.user.findUnique.mockResolvedValue({ name: '张三', email: 'z@test.com' });
 
     const { GET } = await import('@/app/api/apps/[id]/token/route');
 
@@ -43,7 +53,11 @@ describe('GET /api/apps/:id/token — 签发应用 Token', () => {
   it('应用不存在 → 返回 404', async () => {
     const token = await createAuthToken('user-001', 'tenant-001', false);
 
-    mockPrisma.app.findUnique.mockResolvedValue(null);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM APPS') && s.includes('WHERE')) return R([]);
+      return R([]);
+    });
 
     const { GET } = await import('@/app/api/apps/[id]/token/route');
 
@@ -157,6 +171,7 @@ describe('POST /api/apps/verify-token — 验证应用 Token', () => {
 
 // ============================================================
 // POST /api/apps/:id/register-permissions — 注册应用权限
+// ⚠️ 此路由仍使用 Prisma，保留 mockPrisma 配置
 // ============================================================
 describe('POST /api/apps/:id/register-permissions — 注册应用权限', () => {
   it('管理员声明权限 → 成功创建', async () => {

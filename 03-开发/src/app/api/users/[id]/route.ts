@@ -8,11 +8,10 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, noContent, forbidden, notFound, unauthorized } from "@/lib/api-response";
-import { withTenantContext } from "@/lib/rls";
+import { withTenantContext, firstRow, allRows } from "@/lib/rls-pg";
 
 const updateUserSchema = z.object({
   email: z.string().email().optional(),
@@ -43,76 +42,66 @@ export async function GET(
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const isGlobalAdmin = auth.payload.role === "owner" || auth.payload.role === "admin";
+  const isGlobalAdmin = auth.payload.role === "owner";
 
   return withTenantContext(
-    auth.payload.tenantId,
-    isGlobalAdmin,
-    async () => {
+    { tenantId: auth.payload.tenantId, userId: auth.payload.userId, isGlobalAdmin },
+    async (client) => {
       // 通过 UserTenant 查找用户在当前租户的信息
-      const userTenant = await db.userTenant.findUnique({
-        where: {
-          userId_tenantId: {
-            userId: params.id,
-            tenantId: auth.payload.tenantId,
-          },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              avatarUrl: true,
-              emailVerified: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-        },
-      });
+      const utResult = await client.query(
+        `SELECT ut.*, u.id AS "uId", u.email AS "uEmail", u.name AS "uName",
+                u."avatarUrl" AS "uAvatarUrl", u."emailVerified" AS "uEmailVerified",
+                u."createdAt" AS "uCreatedAt", u."updatedAt" AS "uUpdatedAt"
+         FROM user_tenants ut
+         INNER JOIN users u ON u.id = ut."userId"
+         WHERE ut."userId" = $1 AND ut."tenantId" = $2
+         LIMIT 1`,
+        [params.id, auth.payload.tenantId]
+      );
+      const userTenant = firstRow<any>(utResult);
 
       if (!userTenant) return notFound("用户不存在");
 
       // 获取用户在当前租户下的权限
-      const permissions = await db.userPermission.findMany({
-        where: {
-          userId: params.id,
-          tenantId: auth.payload.tenantId,
-        },
-        include: {
-          permission: { select: { key: true, label: true, type: true } },
-        },
-      });
+      const permsResult = await client.query(
+        `SELECT up."permissionId", p.key, p.label, p.type
+         FROM user_permissions up
+         INNER JOIN permissions p ON p.id = up."permissionId"
+         WHERE up."userId" = $1 AND up."tenantId" = $2`,
+        [params.id, auth.payload.tenantId]
+      );
+      const permissions = allRows<any>(permsResult);
 
       // 获取用户的部门信息
-      const userOrgs = await db.userOrganization.findMany({
-        where: { userId: params.id },
-        include: {
-          department: { select: { id: true, name: true } },
-        },
-      });
+      const userOrgsResult = await client.query(
+        `SELECT d.id, d.name, uo."isPrimary"
+         FROM user_organizations uo
+         INNER JOIN departments d ON d.id = uo."organizationId"
+         WHERE uo."userId" = $1`,
+        [params.id]
+      );
+      const userOrgs = allRows<any>(userOrgsResult);
 
       return success({
-        id: userTenant.user.id,
-        email: userTenant.user.email,
-        name: userTenant.user.name,
-        avatarUrl: userTenant.user.avatarUrl,
-        emailVerified: userTenant.user.emailVerified,
+        id: userTenant.uId,
+        email: userTenant.uEmail,
+        name: userTenant.uName,
+        avatarUrl: userTenant.uAvatarUrl,
+        emailVerified: userTenant.uEmailVerified,
         role: userTenant.role,
         status: userTenant.status,
         departments: userOrgs.map((uo) => ({
-          id: uo.department.id,
-          name: uo.department.name,
+          id: uo.id,
+          name: uo.name,
           isPrimary: uo.isPrimary,
         })),
         permissions: permissions.map((up) => ({
           permissionId: up.permissionId,
-          key: up.permission.key,
-          label: up.permission.label,
-          type: up.permission.type,
+          key: up.key,
+          label: up.label,
+          type: up.type,
         })),
-        createdAt: userTenant.user.createdAt,
+        createdAt: userTenant.uCreatedAt,
         joinedAt: userTenant.joinedAt,
       });
     }
@@ -129,62 +118,85 @@ export async function PUT(
   const parsed = await parseBody(request, updateUserSchema);
   if (!parsed.success) return error(parsed.error);
 
-  const isGlobalAdmin = auth.payload.role === "owner" || auth.payload.role === "admin";
+  const isGlobalAdmin = auth.payload.role === "owner";
 
   return withTenantContext(
-    auth.payload.tenantId,
-    isGlobalAdmin,
-    async () => {
-      const userTenant = await db.userTenant.findUnique({
-        where: {
-          userId_tenantId: {
-            userId: params.id,
-            tenantId: auth.payload.tenantId,
-          },
-        },
-      });
+    { tenantId: auth.payload.tenantId, userId: auth.payload.userId, isGlobalAdmin },
+    async (client) => {
+      const utResult = await client.query(
+        `SELECT * FROM user_tenants WHERE "userId" = $1 AND "tenantId" = $2 LIMIT 1`,
+        [params.id, auth.payload.tenantId]
+      );
+      const userTenant = firstRow<any>(utResult);
       if (!userTenant) return notFound("用户不存在");
 
       const { email, password, name, status, role } = parsed.data;
 
       // 更新 UserTenant（角色、状态、密码）
-      const userTenantData: Record<string, unknown> = {};
-      if (role) userTenantData.role = role;
-      if (status) userTenantData.status = status;
+      const utSetClauses: string[] = [];
+      const utParams: unknown[] = [];
+      let utIdx = 1;
+
+      if (role) {
+        utSetClauses.push(`role = $${utIdx}`);
+        utParams.push(role);
+        utIdx++;
+      }
+      if (status) {
+        utSetClauses.push(`status = $${utIdx}`);
+        utParams.push(status);
+        utIdx++;
+      }
       if (password) {
-        userTenantData.passwordHash = await bcrypt.hash(password, 12);
-        userTenantData.passwordUpdatedAt = new Date();
+        const passwordHash = await bcrypt.hash(password, 12);
+        utSetClauses.push(`"passwordHash" = $${utIdx}`);
+        utParams.push(passwordHash);
+        utIdx++;
+        utSetClauses.push(`"passwordUpdatedAt" = NOW()`);
       }
 
-      if (Object.keys(userTenantData).length > 0) {
-        await db.userTenant.update({
-          where: { id: userTenant.id },
-          data: userTenantData,
-        });
+      if (utSetClauses.length > 0) {
+        await client.query(
+          `UPDATE user_tenants SET ${utSetClauses.join(", ")} WHERE id = $${utIdx}`,
+          [...utParams, userTenant.id]
+        );
       }
 
       // 更新 User 全局信息（邮箱、姓名）
-      const userData: Record<string, unknown> = {};
-      if (email) userData.email = email;
-      if (name) userData.name = name;
+      const userSetClauses: string[] = [];
+      const userParams: unknown[] = [];
+      let userIdx = 1;
 
-      if (Object.keys(userData).length > 0) {
-        await db.user.update({
-          where: { id: params.id },
-          data: userData,
-        });
+      if (email) {
+        userSetClauses.push(`email = $${userIdx}`);
+        userParams.push(email);
+        userIdx++;
+      }
+      if (name) {
+        userSetClauses.push(`name = $${userIdx}`);
+        userParams.push(name);
+        userIdx++;
+      }
+
+      if (userSetClauses.length > 0) {
+        await client.query(
+          `UPDATE users SET ${userSetClauses.join(", ")} WHERE id = $${userIdx}`,
+          [...userParams, params.id]
+        );
       }
 
       // 返回更新后的信息
-      const updatedUser = await db.user.findUnique({
-        where: { id: params.id },
-        select: { id: true, email: true, name: true, avatarUrl: true },
-      });
+      const updatedUserResult = await client.query(
+        `SELECT id, email, name, "avatarUrl" FROM users WHERE id = $1 LIMIT 1`,
+        [params.id]
+      );
+      const updatedUser = firstRow<any>(updatedUserResult);
 
-      const updatedUserTenant = await db.userTenant.findUnique({
-        where: { id: userTenant.id },
-        select: { role: true, status: true },
-      });
+      const updatedUtResult = await client.query(
+        `SELECT role, status FROM user_tenants WHERE id = $1 LIMIT 1`,
+        [userTenant.id]
+      );
+      const updatedUserTenant = firstRow<any>(updatedUtResult);
 
       return success({
         ...updatedUser,
@@ -207,29 +219,26 @@ export async function DELETE(
     return error("不能删除当前登录用户");
   }
 
-  const isGlobalAdmin = auth.payload.role === "owner" || auth.payload.role === "admin";
+  const isGlobalAdmin = auth.payload.role === "owner";
 
   return withTenantContext(
-    auth.payload.tenantId,
-    isGlobalAdmin,
-    async () => {
-      const userTenant = await db.userTenant.findUnique({
-        where: {
-          userId_tenantId: {
-            userId: params.id,
-            tenantId: auth.payload.tenantId,
-          },
-        },
-      });
+    { tenantId: auth.payload.tenantId, userId: auth.payload.userId, isGlobalAdmin },
+    async (client) => {
+      const utResult = await client.query(
+        `SELECT * FROM user_tenants WHERE "userId" = $1 AND "tenantId" = $2 LIMIT 1`,
+        [params.id, auth.payload.tenantId]
+      );
+      const userTenant = firstRow<any>(utResult);
       if (!userTenant) return notFound("用户不存在");
 
       // 删除 UserTenant 记录（从租户移除）
-      await db.userTenant.delete({ where: { id: userTenant.id } });
+      await client.query(`DELETE FROM user_tenants WHERE id = $1`, [userTenant.id]);
 
       // 清理该用户在当前租户的权限
-      await db.userPermission.deleteMany({
-        where: { userId: params.id, tenantId: auth.payload.tenantId },
-      });
+      await client.query(
+        `DELETE FROM user_permissions WHERE "userId" = $1 AND "tenantId" = $2`,
+        [params.id, auth.payload.tenantId]
+      );
 
       return noContent();
     }

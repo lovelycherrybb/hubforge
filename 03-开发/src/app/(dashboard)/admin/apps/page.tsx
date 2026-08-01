@@ -107,7 +107,7 @@ export default function AppsPage() {
   const toggleStatus = async (app: App) => {
     const newStatus = app.status === "active" ? "inactive" : "active";
     try {
-      await api.patch(`/api/apps/${app.id}`, { status: newStatus });
+      await api.put(`/api/apps/${app.id}`, { status: newStatus });
       fetchApps();
     } catch {
       setError("操作没成功，再试一次？");

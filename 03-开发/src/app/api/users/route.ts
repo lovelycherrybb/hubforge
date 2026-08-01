@@ -7,11 +7,10 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { parseBody, parseQuery, paginationSchema } from "@/lib/validate";
 import { success, created, error, forbidden, unauthorized, paginated } from "@/lib/api-response";
-import { withTenantContext } from "@/lib/rls";
+import { withTenantContext, allRows, firstRow, countValue } from "@/lib/rls-pg";
 
 const createUserSchema = z.object({
   email: z.string().email(),
@@ -48,42 +47,30 @@ export async function GET(request: NextRequest) {
   if (!parsed.success) return error(parsed.error);
   const { page, pageSize, search, departmentId, status } = parsed.data;
 
-  const isGlobalAdmin = auth.payload.role === "owner" || auth.payload.role === "admin";
+  const isGlobalAdmin = auth.payload.role === "owner";
 
   return withTenantContext(
-    auth.payload.tenantId,
-    isGlobalAdmin,
-    async () => {
-      // 构建 UserTenant 查询条件
-      const where: Record<string, unknown> = {
-        tenantId: auth.payload.tenantId,
-        ...(status && { status }),
-      };
-
+    { tenantId: auth.payload.tenantId, userId: auth.payload.userId, isGlobalAdmin },
+    async (client) => {
       // 如果按部门筛选，先获取该部门下的用户 ID
       let deptUserIds: string[] | undefined;
       if (departmentId) {
-        const userOrgs = await db.userOrganization.findMany({
-          where: { organizationId: departmentId },
-          select: { userId: true },
-        });
-        deptUserIds = userOrgs.map((uo) => uo.userId);
+        const userOrgsResult = await client.query(
+          `SELECT "userId" FROM user_organizations WHERE "organizationId" = $1`,
+          [departmentId]
+        );
+        deptUserIds = allRows<{ userId: string }>(userOrgsResult).map((uo) => uo.userId);
         if (deptUserIds.length === 0) return paginated([], 0, page, pageSize);
       }
 
       // 如果按搜索条件筛选，匹配用户名/邮箱
       let searchUserIds: string[] | undefined;
       if (search) {
-        const matchingUsers = await db.user.findMany({
-          where: {
-            OR: [
-              { name: { contains: search, mode: "insensitive" as const } },
-              { email: { contains: search, mode: "insensitive" as const } },
-            ],
-          },
-          select: { id: true },
-        });
-        searchUserIds = matchingUsers.map((u) => u.id);
+        const matchingResult = await client.query(
+          `SELECT id FROM users WHERE name ILIKE $1 OR email ILIKE $1`,
+          [`%${search}%`]
+        );
+        searchUserIds = allRows<{ id: string }>(matchingResult).map((u) => u.id);
       }
 
       // 合并筛选条件
@@ -97,41 +84,45 @@ export async function GET(request: NextRequest) {
         userIds = searchUserIds;
       }
 
-      if (userIds) {
-        where.userId = { in: userIds };
+      // 构建 WHERE 条件
+      const conditions: string[] = [`ut."tenantId" = $1`];
+      const params: unknown[] = [auth.payload.tenantId];
+      let paramIdx = 2;
+
+      if (status) {
+        conditions.push(`ut.status = $${paramIdx}`);
+        params.push(status);
+        paramIdx++;
       }
 
-      const [userTenants, total] = await Promise.all([
-        db.userTenant.findMany({
-          where,
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          orderBy: { joinedAt: "desc" },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                avatarUrl: true,
-                createdAt: true,
-              },
-            },
-          },
-        }),
-        db.userTenant.count({ where }),
-      ]);
+      if (userIds) {
+        conditions.push(`ut."userId" = ANY($${paramIdx})`);
+        params.push(userIds);
+        paramIdx++;
+      }
 
-      const users = userTenants.map((ut) => ({
-        id: ut.user.id,
-        email: ut.user.email,
-        name: ut.user.name,
-        avatarUrl: ut.user.avatarUrl,
-        role: ut.role,
-        status: ut.status,
-        joinedAt: ut.joinedAt,
-        createdAt: ut.user.createdAt,
-      }));
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+      // 查询总数
+      const countResult = await client.query(
+        `SELECT count(*) FROM user_tenants ut ${whereClause}`,
+        params
+      );
+      const total = countValue(countResult);
+
+      // 查询用户列表（JOIN users 获取用户信息）
+      const offset = (page - 1) * pageSize;
+      const listResult = await client.query(
+        `SELECT u.id, u.email, u.name, u."avatarUrl", u."createdAt",
+                ut.role, ut.status, ut."joinedAt"
+         FROM user_tenants ut
+         INNER JOIN users u ON u.id = ut."userId"
+         ${whereClause}
+         ORDER BY ut."joinedAt" DESC
+         LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+        [...params, pageSize, offset]
+      );
+      const users = allRows(listResult);
 
       return paginated(users, total, page, pageSize);
     }
@@ -145,37 +136,40 @@ export async function POST(request: NextRequest) {
   const parsed = await parseBody(request, createUserSchema);
   if (!parsed.success) return error(parsed.error);
 
-  const isGlobalAdmin = auth.payload.role === "owner" || auth.payload.role === "admin";
+  const isGlobalAdmin = auth.payload.role === "owner";
 
   return withTenantContext(
-    auth.payload.tenantId,
-    isGlobalAdmin,
-    async () => {
+    { tenantId: auth.payload.tenantId, userId: auth.payload.userId, isGlobalAdmin },
+    async (client) => {
       const { email, password, name, role } = parsed.data;
 
       // 检查用户是否已在当前租户中
-      const existingUser = await db.user.findUnique({ where: { email } });
+      const existingUserResult = await client.query(
+        `SELECT id FROM users WHERE email = $1 LIMIT 1`,
+        [email]
+      );
+      const existingUser = firstRow<{ id: string }>(existingUserResult);
       if (existingUser) {
-        const existingMembership = await db.userTenant.findUnique({
-          where: {
-            userId_tenantId: {
-              userId: existingUser.id,
-              tenantId: auth.payload.tenantId,
-            },
-          },
-        });
-        if (existingMembership) return error("该用户已在当前租户中");
+        const existingMembershipResult = await client.query(
+          `SELECT id FROM user_tenants WHERE "userId" = $1 AND "tenantId" = $2 LIMIT 1`,
+          [existingUser.id, auth.payload.tenantId]
+        );
+        if (firstRow(existingMembershipResult)) return error("该用户已在当前租户中");
       }
 
       // 检查用户配额
-      const tenant = await db.tenant.findUnique({
-        where: { id: auth.payload.tenantId },
-      });
+      const tenantResult = await client.query(
+        `SELECT * FROM tenants WHERE id = $1 LIMIT 1`,
+        [auth.payload.tenantId]
+      );
+      const tenant = firstRow<{ id: string; maxUsers: number }>(tenantResult);
       if (!tenant) return error("租户不存在");
 
-      const userCount = await db.userTenant.count({
-        where: { tenantId: auth.payload.tenantId },
-      });
+      const userCountResult = await client.query(
+        `SELECT count(*) FROM user_tenants WHERE "tenantId" = $1`,
+        [auth.payload.tenantId]
+      );
+      const userCount = countValue(userCountResult);
       if (userCount >= tenant.maxUsers) {
         return error(`已达到用户数量上限 (${tenant.maxUsers})`);
       }
@@ -183,34 +177,44 @@ export async function POST(request: NextRequest) {
       const passwordHash = await bcrypt.hash(password, 12);
 
       // 创建或复用全局用户 + 创建 UserTenant（事务）
-      const result = await db.$transaction(async (tx) => {
-        let user = await tx.user.findUnique({ where: { email } });
+      await client.query("BEGIN");
+      try {
+        // 查找或创建用户
+        let userResult = await client.query(
+          `SELECT * FROM users WHERE email = $1 LIMIT 1`,
+          [email]
+        );
+        let user = firstRow<{ id: string; email: string; name: string }>(userResult);
+
         if (!user) {
-          user = await tx.user.create({
-            data: { email, name },
-          });
+          const createUserResult = await client.query(
+            `INSERT INTO users (email, name) VALUES ($1, $2) RETURNING *`,
+            [email, name]
+          );
+          user = firstRow<{ id: string; email: string; name: string }>(createUserResult)!;
         }
 
-        const userTenant = await tx.userTenant.create({
-          data: {
-            userId: user.id,
-            tenantId: auth.payload.tenantId,
-            passwordHash,
-            role,
-            status: "active",
-          },
+        // 创建 UserTenant
+        const userTenantResult = await client.query(
+          `INSERT INTO user_tenants ("userId", "tenantId", "passwordHash", role, status)
+           VALUES ($1, $2, $3, $4, 'active') RETURNING *`,
+          [user.id, auth.payload.tenantId, passwordHash, role]
+        );
+        const userTenant = firstRow<{ role: string; status: string }>(userTenantResult)!;
+
+        await client.query("COMMIT");
+
+        return created({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: userTenant.role,
+          status: userTenant.status,
         });
-
-        return { user, userTenant };
-      });
-
-      return created({
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
-        role: result.userTenant.role,
-        status: result.userTenant.status,
-      });
+      } catch (e) {
+        await client.query("ROLLBACK");
+        throw e;
+      }
     }
   );
 }

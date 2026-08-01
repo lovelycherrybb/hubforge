@@ -46,7 +46,7 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await api.post("/api/auth/login", { email, step: 1 });
+      const res = await api.post("/api/auth/login", { email, step: 1 }, { noAuthRedirect: true });
       const payload = res as { data: { tenants: TenantInfo[]; singleTenant: boolean; name: string } };
       const data = payload.data;
 
@@ -89,7 +89,7 @@ function LoginForm() {
         password,
         step: 2,
         remember,
-      });
+      }, { noAuthRedirect: true });
       router.push(redirect);
     } catch (err: unknown) {
       const apiErr = err as { error?: string };

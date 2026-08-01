@@ -5,15 +5,27 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error, forbidden, notFound, unauthorized } from "@/lib/api-response";
-import { withTenantContext } from "@/lib/rls";
+import { withTenantContext, firstRow } from "@/lib/rls-pg";
+import pg from "pg";
 
 const moveDepartmentSchema = z.object({
   parentId: z.string().nullable(), // null 表示移到根级别
 });
+
+/** 查询部门的 id 和 parentId（提取为独立函数打破 TS7022 循环推断） */
+async function getDeptParent(
+  client: pg.PoolClient,
+  deptId: string
+): Promise<{ id: string; parentId: string | null } | null> {
+  const result = await client.query(
+    'SELECT id, "parentId" FROM departments WHERE id = $1',
+    [deptId]
+  );
+  return firstRow<{ id: string; parentId: string | null }>(result);
+}
 
 export async function PUT(
   request: NextRequest,
@@ -27,16 +39,16 @@ export async function PUT(
   const parsed = await parseBody(request, moveDepartmentSchema);
   if (!parsed.success) return error(parsed.error);
 
-  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+  const isGlobalAdmin = payload.role === "owner";
 
   return withTenantContext(
-    payload.tenantId,
-    isGlobalAdmin,
-    async () => {
-      const dept = await db.department.findFirst({
-        where: { id: params.id, tenantId: payload.tenantId },
-      });
-      if (!dept) return notFound("部门不存在");
+    { tenantId: payload.tenantId, userId: payload.userId, isGlobalAdmin },
+    async (client) => {
+      const deptResult = await client.query(
+        'SELECT * FROM departments WHERE id = $1 AND "tenantId" = $2 LIMIT 1',
+        [params.id, payload.tenantId]
+      );
+      if (!firstRow(deptResult)) return notFound("部门不存在");
 
       const { parentId } = parsed.data;
 
@@ -52,21 +64,18 @@ export async function PUT(
           if (currentParentId === params.id) {
             return error("不能将部门移动到其子孙节点下");
           }
-          const parent: { id: string; parentId: string | null } | null =
-            await db.department.findUnique({
-              where: { id: currentParentId },
-            });
+          const parent = await getDeptParent(client, currentParentId);
           if (!parent) return error("目标父部门不存在");
           currentParentId = parent.parentId;
         }
       }
 
-      const updated = await db.department.update({
-        where: { id: params.id },
-        data: { parentId },
-      });
+      const updatedResult = await client.query(
+        'UPDATE departments SET "parentId" = $1, "updatedAt" = NOW() WHERE id = $2 RETURNING *',
+        [parentId, params.id]
+      );
 
-      return success(updated, "部门已移动");
+      return success(firstRow(updatedResult), "部门已移动");
     }
   );
 }

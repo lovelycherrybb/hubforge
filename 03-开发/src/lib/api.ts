@@ -15,24 +15,33 @@ export interface ApiSuccess<T = unknown> {
 
 export type ApiResponse<T = unknown> = ApiSuccess<T> | ApiError;
 
+export interface FetchApiOptions extends RequestInit {
+  /** 跳过 401 自动跳转登录页（用于登录接口自身） */
+  noAuthRedirect?: boolean;
+}
+
 /**
  * 统一的 fetch 封装
  */
 export async function fetchApi<T = unknown>(
   url: string,
-  options?: RequestInit
+  options?: FetchApiOptions
 ): Promise<T> {
+  const { noAuthRedirect, ...fetchOptions } = options || {};
   const res = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers: {
       "Content-Type": "application/json",
-      ...options?.headers,
+      ...fetchOptions?.headers,
     },
   });
 
   const json = await res.json();
 
   if (!res.ok) {
+    if (res.status === 401 && !noAuthRedirect && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     throw json as ApiError;
   }
 
@@ -45,10 +54,11 @@ export async function fetchApi<T = unknown>(
 export const api = {
   get: <T = unknown>(url: string) => fetchApi<T>(url),
 
-  post: <T = unknown>(url: string, body?: unknown) =>
+  post: <T = unknown>(url: string, body?: unknown, options?: FetchApiOptions) =>
     fetchApi<T>(url, {
       method: "POST",
       body: body ? JSON.stringify(body) : undefined,
+      ...options,
     }),
 
   put: <T = unknown>(url: string, body?: unknown) =>

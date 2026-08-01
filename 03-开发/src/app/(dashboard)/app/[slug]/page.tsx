@@ -68,7 +68,11 @@ export default function AppViewPage() {
 
   // 监听 iframe 的 postMessage 请求
   useEffect(() => {
-    if (!app) return;
+    if (!app) {
+      console.log("[HubForge Bridge] app is null, skipping");
+      return;
+    }
+    console.log("[HubForge Bridge] Setting up message listener for app:", app.slug);
 
     async function handleMessage(event: MessageEvent) {
       const iframe = iframeRef.current;
@@ -78,12 +82,18 @@ export default function AppViewPage() {
       // 注意：event.source 在 sandbox 模式下可能为 null
       const data = event.data;
       if (!data || typeof data !== "object") return;
+      if (!data.type || !data.type.startsWith("hubforge:")) return;
+
+      console.log("[HubForge Bridge] Received message:", data.type);
 
       switch (data.type) {
         case "hubforge:ready": {
           // 应用已加载，请求认证信息
+          console.log("[HubForge Bridge] App ready, fetching token for:", app!.id);
           const tokenData = await fetchAppToken(app!.id);
+          console.log("[HubForge Bridge] Token data:", tokenData ? "success" : "failed");
           if (tokenData) {
+            console.log("[HubForge Bridge] Sending auth to iframe, targetOrigin:", targetOrigin, "iframe:", !!iframe.contentWindow);
             iframe.contentWindow.postMessage(
               {
                 type: "hubforge:auth",
@@ -95,6 +105,7 @@ export default function AppViewPage() {
               },
               targetOrigin
             );
+            console.log("[HubForge Bridge] Auth message sent!");
           } else {
             iframe.contentWindow.postMessage(
               {

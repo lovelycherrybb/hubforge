@@ -45,7 +45,7 @@ export async function GET(
 
   // 框架权限检查：检查用户所在租户是否被授予 app.<slug>.access
   const frameworkPermKey = `app.${app.slug}.access`;
-  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+  const isGlobalAdmin = payload.role === "owner";
 
   if (!isGlobalAdmin) {
     const permission = await db.permission.findFirst({
@@ -67,6 +67,9 @@ export async function GET(
       if (!tenantGrant) {
         return forbidden("租户未开通该应用的访问权限");
       }
+    } else {
+      // 无权限记录 = 应用未配置权限，默认拒绝
+      return forbidden("该应用未配置访问权限");
     }
   }
 

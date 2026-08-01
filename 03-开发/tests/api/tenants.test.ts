@@ -4,7 +4,7 @@
 // ============================================================
 
 import { describe, it, expect, vi } from 'vitest';
-import { mockPrisma, createTestUser, createTestTenant, createAuthToken } from '../setup';
+import { mockPrisma, mockPgClient, createTestUser, createTestTenant, createAuthToken } from '../setup';
 
 // ============================================================
 // 租户列表 GET /api/tenants
@@ -19,8 +19,22 @@ describe('GET /api/tenants — 租户列表', () => {
       createTestTenant({ id: 't2', name: '租户B', slug: 'tenant-b' }),
     ];
 
-    mockPrisma.tenant.findMany.mockResolvedValue(tenants);
-    mockPrisma.tenant.count.mockResolvedValue(2);
+    // 配置 pg mock
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.trim().toUpperCase();
+      // 纯 count 查询（不是子查询）
+      if (s.startsWith('SELECT COUNT(*)')) {
+        return { rows: [{ count: '2' }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      }
+      // 租户列表查询（带 LIMIT）
+      if (s.includes('FROM TENANTS') && s.includes('LIMIT')) {
+        return { rows: tenants, rowCount: 2, command: 'SELECT', oid: 0, fields: [] };
+      }
+      if (s.includes('SET_CONFIG') || s.startsWith('RESET')) {
+        return { rows: [], rowCount: 0, command: 'SET', oid: 0, fields: [] };
+      }
+      return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
+    });
 
     const { GET } = await import('@/app/api/tenants/route');
 
@@ -230,10 +244,15 @@ describe('用户配额限制（TC-027）', () => {
 
     // 租户配额为 5
     const tenant = createTestTenant({ id: 'tenant-001', maxUsers: 5 });
-    mockPrisma.tenant.findUnique.mockResolvedValue(tenant);
 
-    // 当前已有 5 个用户
-    mockPrisma.userTenant.count.mockResolvedValue(5);
+    // 配置 pg mock: tenant 查询返回配额，count 返回已达上限
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM USERS')) return { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] };
+      if (s.includes('FROM TENANTS')) return { rows: [tenant], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      if (s.includes('COUNT(*)')) return { rows: [{ count: '5' }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
+    });
 
     const { POST } = await import('@/app/api/users/route');
 
@@ -260,26 +279,28 @@ describe('用户配额限制（TC-027）', () => {
   it('用户数未达上限 → 允许创建新用户', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    mockPrisma.user.findUnique.mockResolvedValue(null);
-
     const tenant = createTestTenant({ id: 'tenant-001', maxUsers: 100 });
-    mockPrisma.tenant.findUnique.mockResolvedValue(tenant);
+    const newUser = createTestUser({ id: 'new-user', email: 'newuser@test.com', name: '新用户' });
 
-    // 当前只有 3 个用户
-    mockPrisma.userTenant.count.mockResolvedValue(3);
-
-    const newUser = createTestUser({
-      id: 'new-user',
-      email: 'newuser@test.com',
-      name: '新用户',
-    });
-    mockPrisma.$transaction.mockImplementation(async (fn: any) => {
-      const tx = {
-        ...mockPrisma,
-        user: { ...mockPrisma.user, findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue(newUser) },
-        userTenant: { ...mockPrisma.userTenant, create: vi.fn().mockResolvedValue({ id: 'ut-new', role: 'member', status: 'active' }) },
-      };
-      return fn(tx);
+    // 配置 pg mock: user不存在→tenant→count=3→BEGIN→INSERT user→INSERT userTenant→COMMIT
+    let callCount = 0;
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // user check (email)
+      if (s.includes('FROM USERS') && s.includes('EMAIL')) return { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] };
+      // tenant lookup
+      if (s.includes('FROM TENANTS')) return { rows: [tenant], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      // count users
+      if (s.includes('COUNT(*)')) return { rows: [{ count: '3' }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      // BEGIN/COMMIT
+      if (s === 'BEGIN' || s === 'COMMIT') return { rows: [], rowCount: 0, command: s, oid: 0, fields: [] };
+      // INSERT users
+      if (s.includes('INTO USERS')) return { rows: [newUser], rowCount: 1, command: 'INSERT', oid: 0, fields: [] };
+      // INSERT user_tenants
+      if (s.includes('INTO USER_TENANTS')) return { rows: [{ id: 'ut-new', role: 'member', status: 'active' }], rowCount: 1, command: 'INSERT', oid: 0, fields: [] };
+      // user check by id (for existing user)
+      if (s.includes('FROM USERS')) return { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] };
+      return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
     });
 
     const { POST } = await import('@/app/api/users/route');

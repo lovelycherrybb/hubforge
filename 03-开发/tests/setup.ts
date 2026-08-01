@@ -70,8 +70,144 @@ vi.mock('@/lib/rls', () => ({
   setTenantContext: vi.fn(),
   setAdminContext: vi.fn(),
   withTenantContext: vi.fn(
-    (_tenantId: string, _isGlobalAdmin: boolean, fn: () => Promise<any>) => fn()
+    (_tenantId: string, _userId: string, _isGlobalAdmin: boolean, fn: () => Promise<any>) => fn()
   ),
+}));
+
+// Mock @/lib/pg-pool 模块，防止测试连接真实数据库
+vi.mock('@/lib/pg-pool', () => ({
+  rlsPool: { connect: vi.fn(), end: vi.fn() },
+}));
+
+// Mock pg 客户端，路由的 client.query() 调用会被此 mock 拦截
+export const mockPgClient = {
+  query: vi.fn(),
+  release: vi.fn(),
+};
+
+// SQL → Prisma mock 桥接：把 client.query 的 SQL 路由到对应的 Prisma mock
+function pgQueryBridge(sql: string, params?: any[]): any {
+  const s = sql.trim().toUpperCase();
+  const p = params || [];
+
+  // SELECT
+  if (s.startsWith('SELECT')) {
+    if (s.includes('COUNT(*)')) {
+      if (s.includes('FROM APPS')) return wrapCount(mockPrisma.app.count.mock.results[0]?.value ?? 0);
+      if (s.includes('FROM USER_TENANTS')) return wrapCount(mockPrisma.userTenant.count.mock.results[0]?.value ?? 0);
+      if (s.includes('FROM DEPARTMENTS')) return wrapCount(mockPrisma.department.count.mock.results[0]?.value ?? 0);
+      if (s.includes('FROM USER_ORGANIZATIONS')) return wrapCount(mockPrisma.userOrganization.count.mock.results[0]?.value ?? 0);
+      return wrapCount(0);
+    }
+    // 单表查询（LIMIT 1 = findFirst/findUnique）
+    if (s.includes('FROM APPS')) {
+      const d = s.includes('LIMIT 1') ? mockPrisma.app.findUnique.mock.results[0]?.value : mockPrisma.app.findMany.mock.results[0]?.value;
+      return s.includes('LIMIT 1') ? wrap(d ?? null) : wrapMany(d ?? []);
+    }
+    if (s.includes('FROM TENANTS')) {
+      const d = mockPrisma.tenant.findUnique.mock.results[0]?.value;
+      return s.includes('LIMIT 1') ? wrap(d ?? null) : wrapMany(d ?? []);
+    }
+    if (s.includes('FROM USERS') && !s.includes('USER_TENANTS') && !s.includes('USER_PERMISSIONS') && !s.includes('USER_ORGANIZATIONS')) {
+      const d = s.includes('LIMIT 1') ? mockPrisma.user.findUnique.mock.results[0]?.value : mockPrisma.user.findMany.mock.results[0]?.value;
+      return s.includes('LIMIT 1') ? wrap(d ?? null) : wrapMany(d ?? []);
+    }
+    if (s.includes('FROM USER_TENANTS')) {
+      const d = mockPrisma.userTenant.findUnique.mock.results[0]?.value ?? mockPrisma.userTenant.findFirst.mock.results[0]?.value ?? mockPrisma.userTenant.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM DEPARTMENTS')) {
+      const d = mockPrisma.department.findFirst.mock.results[0]?.value ?? mockPrisma.department.findUnique.mock.results[0]?.value ?? mockPrisma.department.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM PERMISSIONS')) {
+      const d = mockPrisma.permission.findFirst.mock.results[0]?.value ?? mockPrisma.permission.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM USER_PERMISSIONS')) {
+      const d = mockPrisma.userPermission.findFirst.mock.results[0]?.value ?? mockPrisma.userPermission.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM DEPARTMENT_PERMISSIONS')) {
+      const d = mockPrisma.departmentPermission.findFirst.mock.results[0]?.value ?? mockPrisma.departmentPermission.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM TENANT_PERMISSIONS')) {
+      const d = mockPrisma.tenantPermission.findFirst.mock.results[0]?.value ?? mockPrisma.tenantPermission.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+    if (s.includes('FROM USER_ORGANIZATIONS')) {
+      const d = mockPrisma.userOrganization.findFirst.mock.results[0]?.value ?? mockPrisma.userOrganization.findMany.mock.results[0]?.value;
+      return Array.isArray(d) ? wrapMany(d) : wrap(d ?? null);
+    }
+  }
+
+  // INSERT
+  if (s.startsWith('INSERT')) {
+    if (s.includes('INTO APPS')) return wrap(mockPrisma.app.create.mock.results[0]?.value ?? { id: 'new-app' });
+    if (s.includes('INTO TENANTS')) return wrap(mockPrisma.tenant.create?.mock.results[0]?.value ?? { id: 'new-tenant' });
+    if (s.includes('INTO USERS')) return wrap(mockPrisma.user.create.mock.results[0]?.value ?? { id: 'new-user' });
+    if (s.includes('INTO USER_TENANTS')) return wrap(mockPrisma.userTenant.create.mock.results[0]?.value ?? { id: 'new-ut' });
+    if (s.includes('INTO DEPARTMENTS')) return wrap(mockPrisma.department.create.mock.results[0]?.value ?? { id: 'new-dept' });
+    if (s.includes('INTO PERMISSIONS')) return wrap(mockPrisma.permission.create.mock.results[0]?.value ?? { id: 'new-perm' });
+    if (s.includes('INTO USER_PERMISSIONS')) return wrap(mockPrisma.userPermission.create?.mock.results[0]?.value ?? { id: 'new-up' });
+    if (s.includes('INTO TENANT_PERMISSIONS')) return wrap(mockPrisma.tenantPermission.create?.mock.results[0]?.value ?? { id: 'new-tp' });
+    if (s.includes('INTO TENANT_APPS')) return wrap(mockPrisma.tenantApp.create?.mock.results[0]?.value ?? { id: 'new-ta' });
+    if (s.includes('INTO USER_ORGANIZATIONS')) return wrap(mockPrisma.userOrganization.create?.mock.results[0]?.value ?? { id: 'new-uo' });
+    if (s.includes('ON CONFLICT')) return wrap({ id: 'upserted' });
+  }
+
+  // UPDATE
+  if (s.startsWith('UPDATE')) {
+    if (s.includes('DEPARTMENTS')) return wrap(mockPrisma.department.update.mock.results[0]?.value ?? { id: 'updated' });
+    if (s.includes('USER_TENANTS')) return wrap(mockPrisma.userTenant.update.mock.results[0]?.value ?? { id: 'updated' });
+    if (s.includes('USERS')) return wrap(mockPrisma.user.update.mock.results[0]?.value ?? { id: 'updated' });
+  }
+
+  // DELETE
+  if (s.startsWith('DELETE')) return { rows: [], rowCount: 1, command: 'DELETE', oid: 0, fields: [] };
+
+  // SET / RESET / BEGIN / COMMIT / ROLLBACK
+  if (s.includes('SET_CONFIG') || s.startsWith('RESET') || s.startsWith('SET ') ||
+      s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
+    return { rows: [], rowCount: 0, command: s.split(' ')[0], oid: 0, fields: [] };
+  }
+
+  return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
+}
+
+function wrap(data: any): any {
+  if (data === null || data === undefined) return { rows: [], rowCount: 0, command: 'SELECT', oid: 0, fields: [] };
+  if (data instanceof Promise) return data.then(d => wrap(d));
+  return { rows: [data], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+}
+
+function wrapMany(data: any): any {
+  if (data instanceof Promise) return data.then(d => wrapMany(d));
+  if (!Array.isArray(data)) return { rows: data ? [data] : [], rowCount: data ? 1 : 0, command: 'SELECT', oid: 0, fields: [] };
+  return { rows: data, rowCount: data.length, command: 'SELECT', oid: 0, fields: [] };
+}
+
+function wrapCount(data: any): any {
+  if (data instanceof Promise) return data.then(d => wrapCount(d));
+  return { rows: [{ count: String(data ?? 0) }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+}
+
+// Mock @/lib/rls-pg 模块，让 withTenantContext 传入 mockPgClient
+const _firstRow = vi.fn((result: any) => result?.rows?.[0] ?? null);
+const _allRows = vi.fn((result: any) => result?.rows ?? []);
+const _countValue = vi.fn((result: any) => Number(result?.rows?.[0]?.count ?? 0));
+
+vi.mock('@/lib/rls-pg', () => ({
+  withTenantContext: vi.fn(
+    (_ctx: any, fn: (client: any) => Promise<any>) => fn(mockPgClient)
+  ),
+  withElevatedContext: vi.fn(
+    (fn: (client: any) => Promise<any>) => fn(mockPgClient)
+  ),
+  firstRow: (result: any) => _firstRow(result),
+  allRows: (result: any) => _allRows(result),
+  countValue: (result: any) => _countValue(result),
 }));
 
 // Mock next/headers 的 cookies()，返回可操作的 Cookie 存储
@@ -112,6 +248,7 @@ vi.mock('@/lib/auth', async () => {
 
   return {
     COOKIE_NAME,
+    JWT_SECRET: secret,
     isAdmin: (payload: any) => payload?.role === 'owner' || payload?.role === 'admin',
     signToken: async (payload: any) => {
       return new SignJWT(payload as any)
@@ -279,6 +416,11 @@ export function resetAllMocks() {
   mockPrisma.$queryRawUnsafe.mockReset();
   mockPrisma.$connect.mockReset();
   mockPrisma.$disconnect.mockReset();
+
+  // 重置 pg mock 客户端
+  mockPgClient.query.mockReset();
+  mockPgClient.query.mockImplementation((sql: string, params?: any[]) => pgQueryBridge(sql, params));
+  mockPgClient.release.mockReset();
 }
 
 // 每个测试前自动重置 mock

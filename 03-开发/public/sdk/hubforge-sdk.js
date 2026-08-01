@@ -50,6 +50,11 @@
       var data = event.data;
       if (!data || typeof data !== "object") return;
 
+      // 调试：记录所有收到的消息
+      if (data.type && data.type.indexOf("hubforge:") === 0) {
+        console.log("[HubForge SDK] Received message:", data.type, "from origin:", event.origin);
+      }
+
       switch (data.type) {
         case "hubforge:auth":
           self._connected = true;
@@ -94,15 +99,30 @@
 
   HubForgeSDK.prototype._sendReady = function () {
     var self = this;
-    // 给 Portal 一点时间准备
-    setTimeout(function () {
+    function trySend() {
+      if (self._connected) return; // 已收到 auth，停止重试
+      if (self._retryCount >= self._maxRetries) return; // 超过最大重试次数
+
       if (window.parent && window.parent !== window) {
+        console.log("[HubForge SDK] Sending ready (attempt " + (self._retryCount + 1) + ")");
         window.parent.postMessage({ type: "hubforge:ready" }, "*");
-        self._readyCallbacks.forEach(function (cb) {
-          try { cb(); } catch (e) { console.error("[HubForge SDK] ready callback:", e); }
-        });
+        self._retryCount++;
+
+        if (self._retryCount === 1) {
+          // 第一次发送时触发 ready 回调
+          self._readyCallbacks.forEach(function (cb) {
+            try { cb(); } catch (e) { console.error("[HubForge SDK] ready callback:", e); }
+          });
+        }
+
+        // 如果 2 秒后还没收到 auth，重试
+        setTimeout(function () {
+          if (!self._connected) trySend();
+        }, 2000);
       }
-    }, 100);
+    }
+    // 给 Portal 一点时间准备
+    setTimeout(trySend, 100);
   };
 
   /**

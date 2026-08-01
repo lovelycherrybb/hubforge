@@ -88,6 +88,7 @@ export default function UsersPage() {
   const openDetail = async (user: User) => {
     setDetailLoading(true);
     setSelectedUser(null);
+    setError("");
     setSaveMsg("");
     setResetPassword("");
     try {

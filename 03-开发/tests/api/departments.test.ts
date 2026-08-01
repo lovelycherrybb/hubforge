@@ -3,8 +3,13 @@
 // 测试部门 CRUD、部门树、移动节点、删除拦截
 // ============================================================
 
-import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { mockPrisma, createTestTenant, createAuthToken } from '../setup';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { mockPgClient, createAuthToken } from '../setup';
+
+/** 创建 pg 查询结果 */
+const R = (rows: any[], command = 'SELECT') => ({
+  rows, rowCount: rows.length, command, oid: 0, fields: [],
+});
 
 let POST_dept: any, GET_tree: any, PUT_dept: any, DELETE_dept: any, PUT_move: any;
 
@@ -34,7 +39,12 @@ describe('POST /api/departments — 创建部门', () => {
       sortOrder: 0,
       tenantId: 'tenant-001',
     };
-    mockPrisma.department.create.mockResolvedValue(mockDept);
+
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.startsWith('INSERT') && s.includes('DEPARTMENTS')) return R([mockDept], 'INSERT');
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments', {
       method: 'POST',
@@ -56,10 +66,6 @@ describe('POST /api/departments — 创建部门', () => {
   it('管理员创建子部门 → 成功（TC-034）', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const tenant = createTestTenant({ id: 'tenant-001', maxOrgLevels: 5 });
-    mockPrisma.tenant.findUnique.mockResolvedValue(tenant);
-    mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-root', parentId: null });
-
     const mockDept = {
       id: 'dept-002',
       name: '生产部',
@@ -67,7 +73,22 @@ describe('POST /api/departments — 创建部门', () => {
       sortOrder: 0,
       tenantId: 'tenant-001',
     };
-    mockPrisma.department.create.mockResolvedValue(mockDept);
+
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 租户配置（maxOrgLevels）
+      if (s.includes('FROM TENANTS'))
+        return R([{ maxOrgLevels: 5 }]);
+      // 查询父部门的 parentId（SELECT "parentId" FROM departments）
+      if (s.includes('FROM DEPARTMENTS') && s.includes('"PARENTID"'))
+        return R([{ parentId: null }]);
+      // 检查父部门存在（SELECT id FROM departments）
+      if (s.includes('FROM DEPARTMENTS') && !s.includes('COUNT'))
+        return R([{ id: 'dept-root' }]);
+      // INSERT
+      if (s.startsWith('INSERT') && s.includes('DEPARTMENTS')) return R([mockDept], 'INSERT');
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments', {
       method: 'POST',
@@ -114,10 +135,15 @@ describe('GET /api/departments/tree — 部门树', () => {
     const token = await createAuthToken('user-001', 'tenant-001', 'member');
 
     const departments = [
-      { id: 'dept-root', name: '总公司', parentId: null, sortOrder: 0, _count: { users: 5 } },
-      { id: 'dept-002', name: '生产部', parentId: 'dept-root', sortOrder: 1, _count: { users: 3 } },
+      { id: 'dept-root', name: '总公司', parentId: null, sortOrder: 0, userCount: 5 },
+      { id: 'dept-002', name: '生产部', parentId: 'dept-root', sortOrder: 1, userCount: 3 },
     ];
-    mockPrisma.department.findMany.mockResolvedValue(departments);
+
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM DEPARTMENTS')) return R(departments);
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/tree', {
       method: 'GET',
@@ -155,11 +181,18 @@ describe('DELETE /api/departments/:id — 删除部门', () => {
   it('删除无用户无子部门的部门 → 成功（TC-036）', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const dept = { id: 'dept-001', name: '质检部', tenantId: 'tenant-001' };
-    mockPrisma.department.findFirst.mockResolvedValue(dept);
-    mockPrisma.department.count.mockResolvedValue(0);
-    mockPrisma.userOrganization.count.mockResolvedValue(0);
-    mockPrisma.department.delete.mockResolvedValue(dept);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 查找部门
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT')) return R([{ id: 'dept-001', name: '质检部', tenantId: 'tenant-001' }]);
+      // 子部门计数
+      if (s.includes('COUNT(*)') && s.includes('FROM DEPARTMENTS')) return R([{ count: '0' }]);
+      // 用户计数
+      if (s.includes('COUNT(*)') && s.includes('FROM USER_ORGANIZATIONS')) return R([{ count: '0' }]);
+      // DELETE
+      if (s.startsWith('DELETE')) return { rows: [], rowCount: 1, command: 'DELETE', oid: 0, fields: [] };
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/dept-001', {
       method: 'DELETE',
@@ -174,10 +207,13 @@ describe('DELETE /api/departments/:id — 删除部门', () => {
   it('删除含用户的部门 → 拦截（TC-037）', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const dept = { id: 'dept-001', name: '生产部', tenantId: 'tenant-001' };
-    mockPrisma.department.findFirst.mockResolvedValue(dept);
-    mockPrisma.department.count.mockResolvedValue(0);
-    mockPrisma.userOrganization.count.mockResolvedValue(3);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT')) return R([{ id: 'dept-001', name: '生产部', tenantId: 'tenant-001' }]);
+      if (s.includes('COUNT(*)') && s.includes('FROM DEPARTMENTS')) return R([{ count: '0' }]);
+      if (s.includes('COUNT(*)') && s.includes('FROM USER_ORGANIZATIONS')) return R([{ count: '3' }]);
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/dept-001', {
       method: 'DELETE',
@@ -195,9 +231,12 @@ describe('DELETE /api/departments/:id — 删除部门', () => {
   it('删除含子部门的部门 → 拦截', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const dept = { id: 'dept-001', name: '总公司', tenantId: 'tenant-001' };
-    mockPrisma.department.findFirst.mockResolvedValue(dept);
-    mockPrisma.department.count.mockResolvedValue(2);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT')) return R([{ id: 'dept-001', name: '总公司', tenantId: 'tenant-001' }]);
+      if (s.includes('COUNT(*)') && s.includes('FROM DEPARTMENTS')) return R([{ count: '2' }]);
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/dept-001', {
       method: 'DELETE',
@@ -215,7 +254,11 @@ describe('DELETE /api/departments/:id — 删除部门', () => {
   it('删除不存在的部门 → 返回 404', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    mockPrisma.department.findFirst.mockResolvedValue(null);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT')) return R([]);
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/nonexistent', {
       method: 'DELETE',
@@ -256,8 +299,13 @@ describe('PUT /api/departments/:id/move — 移动部门', () => {
   it('将部门移动到自身下 → 拦截', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const dept = { id: 'dept-001', name: 'IT部', parentId: 'dept-root', tenantId: 'tenant-001' };
-    mockPrisma.department.findFirst.mockResolvedValue(dept);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 查找源部门
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT'))
+        return R([{ id: 'dept-001', name: 'IT部', parentId: 'dept-root', tenantId: 'tenant-001' }]);
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/dept-001/move', {
       method: 'PUT',
@@ -279,13 +327,19 @@ describe('PUT /api/departments/:id/move — 移动部门', () => {
   it('移动部门到新父级 → 成功（TC-038）', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', 'owner');
 
-    const dept = { id: 'dept-it', name: 'IT部', parentId: 'dept-root', tenantId: 'tenant-001' };
-    mockPrisma.department.findFirst.mockResolvedValue(dept);
-    // 目标父部门：不在祖先链中，parentId 为 null（根级别）
-    mockPrisma.department.findUnique.mockResolvedValue({ id: 'dept-branch', parentId: null });
-
-    const updated = { ...dept, parentId: 'dept-branch' };
-    mockPrisma.department.update.mockResolvedValue(updated);
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 查找源部门
+      if (s.includes('FROM DEPARTMENTS') && s.includes('LIMIT'))
+        return R([{ id: 'dept-it', name: 'IT部', parentId: 'dept-root', tenantId: 'tenant-001' }]);
+      // 查找目标父部门（getDeptParent）
+      if (s.includes('FROM DEPARTMENTS') && s.includes('"PARENTID"'))
+        return R([{ id: 'dept-branch', parentId: null }]);
+      // UPDATE
+      if (s.startsWith('UPDATE') && s.includes('DEPARTMENTS'))
+        return R([{ id: 'dept-it', name: 'IT部', parentId: 'dept-branch', tenantId: 'tenant-001' }], 'UPDATE');
+      return R([]);
+    });
 
     const request = new Request('http://localhost:3000/api/departments/dept-it/move', {
       method: 'PUT',

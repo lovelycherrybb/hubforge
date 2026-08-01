@@ -3,8 +3,13 @@
 // 测试应用 CRUD、slug 唯一性、权限控制
 // ============================================================
 
-import { describe, it, expect, vi } from 'vitest';
-import { mockPrisma, createAuthToken } from '../setup';
+import { describe, it, expect } from 'vitest';
+import { mockPgClient, createAuthToken } from '../setup';
+
+/** 创建 pg 查询结果 */
+const R = (rows: any[], command = 'SELECT') => ({
+  rows, rowCount: rows.length, command, oid: 0, fields: [],
+});
 
 // ============================================================
 // POST /api/apps — 注册应用（仅主租户）
@@ -12,8 +17,6 @@ import { mockPrisma, createAuthToken } from '../setup';
 describe('POST /api/apps — 注册应用', () => {
   it('主租户管理员注册应用 → 成功（TC-053）', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', true);
-
-    mockPrisma.app.findFirst.mockResolvedValue(null); // slug 不重复
 
     const mockApp = {
       id: 'app-001',
@@ -25,10 +28,23 @@ describe('POST /api/apps — 注册应用', () => {
       sortOrder: 0,
       createdAt: new Date(),
     };
-    mockPrisma.app.create.mockResolvedValue(mockApp);
-    mockPrisma.permission.findFirst.mockResolvedValue(null); // 框架权限不存在，需创建
-    mockPrisma.permission.create.mockResolvedValue({ id: 'perm-001' });
-    mockPrisma.tenantApp.create.mockResolvedValue({});
+
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // slug 唯一性检查
+      if (s.includes('FROM APPS') && s.includes('SLUG')) return R([]);
+      // INSERT app
+      if (s.startsWith('INSERT') && s.includes('INTO APPS')) return R([mockApp], 'INSERT');
+      // INSERT tenant_apps
+      if (s.includes('INTO TENANT_APPS')) return R([{ id: 'new-ta' }], 'INSERT');
+      // 框架权限检查（不存在）
+      if (s.includes('FROM PERMISSIONS') && s.includes('FRAMEWORK')) return R([]);
+      // INSERT permissions
+      if (s.startsWith('INSERT') && s.includes('INTO PERMISSIONS') && !s.includes('TENANT_PERMISSIONS')) return R([{ id: 'perm-001' }], 'INSERT');
+      // INSERT tenant_permissions
+      if (s.includes('INTO TENANT_PERMISSIONS')) return R([{ id: 'new-tp' }], 'INSERT');
+      return R([]);
+    });
 
     const { POST } = await import('@/app/api/apps/route');
 
@@ -57,7 +73,11 @@ describe('POST /api/apps — 注册应用', () => {
   it('slug 已存在 → 注册失败', async () => {
     const token = await createAuthToken('admin-001', 'tenant-001', true);
 
-    mockPrisma.app.findFirst.mockResolvedValue({ id: 'existing-app', slug: 'dashboard' });
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('FROM APPS') && s.includes('SLUG')) return R([{ id: 'existing-app', slug: 'dashboard' }]);
+      return R([]);
+    });
 
     const { POST } = await import('@/app/api/apps/route');
 
@@ -139,8 +159,13 @@ describe('GET /api/apps — 应用列表', () => {
       { id: 'app-1', name: '巡检系统', slug: 'inspection', status: 'active' },
       { id: 'app-2', name: '数据看板', slug: 'dashboard', status: 'active' },
     ];
-    mockPrisma.app.findMany.mockResolvedValue(apps);
-    mockPrisma.app.count.mockResolvedValue(2);
+
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      if (s.includes('COUNT(*)')) return R([{ count: '2' }]);
+      if (s.includes('FROM APPS')) return R(apps);
+      return R([]);
+    });
 
     const { GET } = await import('@/app/api/apps/route');
 

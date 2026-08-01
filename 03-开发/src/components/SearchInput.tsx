@@ -1,28 +1,49 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 interface SearchInputProps {
   placeholder?: string;
   onSearch?: (value: string) => void;
   className?: string;
+  debounceMs?: number;
 }
 
 export function SearchInput({
   placeholder = "搜索...",
   onSearch,
   className = "",
+  debounceMs = 300,
 }: SearchInputProps) {
   const [value, setValue] = useState("");
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  const handleChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = e.target.value;
-      setValue(v);
-      onSearch?.(v);
+  const debouncedSearch = useCallback(
+    (v: string) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        onSearch?.(v);
+      }, debounceMs);
     },
-    [onSearch]
+    [onSearch, debounceMs]
   );
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setValue(v);
+    debouncedSearch(v);
+  };
+
+  const handleClear = () => {
+    setValue("");
+    onSearch?.("");
+  };
 
   return (
     <div className={`relative ${className}`}>
@@ -44,8 +65,21 @@ export function SearchInput({
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
-        className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-gray-50 placeholder:text-gray-400 text-[#333] focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] focus:border-[#1a1a2e] focus:bg-white"
+        className="w-full pl-9 pr-8 py-1.5 text-sm rounded-lg border border-gray-300 bg-gray-50 placeholder:text-gray-400 text-[#333] focus:outline-none focus:ring-2 focus:ring-[#1a1a2e] focus:border-[#1a1a2e] focus:bg-white"
       />
+      {value && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-[#555] transition-colors"
+          aria-label="清除"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

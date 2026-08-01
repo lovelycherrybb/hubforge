@@ -4,25 +4,26 @@
 // ============================================================
 
 import { describe, it, expect, vi } from 'vitest';
-import { mockPrisma, createTestUser, createTestTenant, createAuthToken } from '../setup';
+import { mockPrisma, mockPgClient, createTestTenant, createAuthToken } from '../setup';
+
+/** 创建 pg 查询结果 */
+const R = (rows: any[], command = 'SELECT') => ({
+  rows, rowCount: rows.length, command, oid: 0, fields: [],
+});
 
 // ============================================================
-// register 测试
+// register 测试（⚠️ 路由仍使用 Prisma，保留 mockPrisma）
 // ============================================================
 describe('POST /api/auth/register — 用户注册', () => {
-  // 动态导入路由模块，确保 mock 生效
   async function getRoute() {
     return await import('@/app/api/auth/register/route');
   }
 
   it('正常注册新租户 → 返回成功（TC-001）', async () => {
-    // 注册API现在是admin-only，需要owner token
     const ownerToken = await createAuthToken('owner-001', 'tenant-001', true);
 
-    // 准备：模拟 slug 不存在
-    mockPrisma.tenant.findUnique.mockResolvedValue(null); // slug 不重复
+    mockPrisma.tenant.findUnique.mockResolvedValue(null);
 
-    // 模拟事务
     const mockTenant = createTestTenant({ id: 'new-tenant-id', slug: 'new-tenant' });
     const mockNewUser = { id: 'new-user-id', email: 'new@example.com', name: '新用户' };
     mockPrisma.$transaction.mockImplementation(async (fn: any) => {
@@ -66,7 +67,6 @@ describe('POST /api/auth/register — 用户注册', () => {
   it('重复slug注册 → 返回错误（TC-002）', async () => {
     const ownerToken = await createAuthToken('owner-001', 'tenant-001', true);
 
-    // slug 已存在
     mockPrisma.tenant.findUnique.mockResolvedValue(
       createTestTenant({ slug: 'existing-slug' })
     );
@@ -105,7 +105,7 @@ describe('POST /api/auth/register — 用户注册', () => {
         tenantName: '测试租户',
         tenantSlug: 'test-slug',
         email: 'test@example.com',
-        password: '123', // 太弱
+        password: '123',
         name: '测试',
       }),
     }) as any;
@@ -114,7 +114,6 @@ describe('POST /api/auth/register — 用户注册', () => {
     const data = await response.json();
 
     expect(data.success).toBe(false);
-    // Zod 验证失败，应返回错误信息
     expect(data.error).toBeTruthy();
   });
 
@@ -136,7 +135,7 @@ describe('POST /api/auth/register — 用户注册', () => {
 });
 
 // ============================================================
-// login 测试
+// login 测试（⚠️ 路由仍使用 Prisma，保留 mockPrisma）
 // ============================================================
 describe('POST /api/auth/login — 用户登录', () => {
   async function getRoute() {
@@ -147,36 +146,50 @@ describe('POST /api/auth/login — 用户登录', () => {
   const TEST_PASSWORD = 'Abcd@1234';
   const TENANT_ID = 'tenant-test-001';
 
-  /** Step1 mock: 返回用户+租户列表 */
   function mockStep1(passwordHash: string, userOverrides: Record<string, any> = {}) {
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'user-test-001',
-      email: TEST_EMAIL,
-      name: '测试用户',
-      tenantMemberships: [{
-        id: 'ut-001',
-        tenantId: TENANT_ID,
-        role: 'admin',
-        status: userOverrides.status || 'active',
-        tenant: createTestTenant({ id: TENANT_ID }),
-      }],
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // Step1: 查询用户
+      if (s.includes('FROM USERS') && s.includes('EMAIL')) {
+        return { rows: [{ id: 'user-test-001', email: TEST_EMAIL, name: '测试用户' }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      }
+      // Step1: 查询租户成员
+      if (s.includes('FROM USER_TENANTS') && s.includes('JOIN TENANTS')) {
+        return { rows: [{
+          id: 'ut-001', tenantId: TENANT_ID, role: 'admin', status: userOverrides.status || 'active',
+          t_id: TENANT_ID, t_name: '测试租户', t_slug: 'test-tenant', t_logoUrl: null, t_status: 'active',
+        }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      }
+      // set_config / RESET
+      if (s.includes('SET_CONFIG') || s.startsWith('RESET')) {
+        return { rows: [], rowCount: 0, command: 'SET', oid: 0, fields: [] };
+      }
+      return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
     });
   }
 
-  /** Step2 mock: 返回 userTenant 记录 */
   function mockStep2(passwordHash: string, utOverrides: Record<string, any> = {}) {
-    mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-test-001' });
-    mockPrisma.userTenant.findUnique.mockResolvedValue({
-      id: 'ut-001',
-      userId: 'user-test-001',
-      tenantId: TENANT_ID,
-      role: 'admin',
-      status: utOverrides.status || 'active',
-      passwordHash,
-      failedAttempts: utOverrides.failedAttempts || 0,
-      lockedUntil: utOverrides.lockedUntil || null,
-      user: { id: 'user-test-001', email: TEST_EMAIL, name: '测试用户' },
-      tenant: createTestTenant({ id: TENANT_ID }),
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // Step2: 查询 userTenant + user + tenant
+      if (s.includes('FROM USER_TENANTS') && s.includes('JOIN USERS')) {
+        return { rows: [{
+          id: 'ut-001', userId: 'user-test-001', tenantId: TENANT_ID,
+          passwordHash, role: 'admin', status: utOverrides.status || 'active',
+          failedAttempts: utOverrides.failedAttempts || 0, lockedUntil: utOverrides.lockedUntil || null,
+          u_id: 'user-test-001', u_email: TEST_EMAIL, u_name: '测试用户',
+          t_id: TENANT_ID, t_name: '测试租户', t_slug: 'test-tenant', t_status: 'active',
+        }], rowCount: 1, command: 'SELECT', oid: 0, fields: [] };
+      }
+      // UPDATE user_tenants
+      if (s.startsWith('UPDATE') && s.includes('USER_TENANTS')) {
+        return { rows: [], rowCount: 1, command: 'UPDATE', oid: 0, fields: [] };
+      }
+      // set_config / RESET
+      if (s.includes('SET_CONFIG') || s.startsWith('RESET')) {
+        return { rows: [], rowCount: 0, command: 'SET', oid: 0, fields: [] };
+      }
+      return { rows: [], rowCount: 0, command: '', oid: 0, fields: [] };
     });
   }
 
@@ -209,7 +222,6 @@ describe('POST /api/auth/login — 用户登录', () => {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash('Correct@123', 12);
     mockStep2(passwordHash, { failedAttempts: 0 });
-    mockPrisma.userTenant.update.mockResolvedValue({});
 
     const { POST } = await getRoute();
     const request = new Request('http://localhost:3000/api/auth/login', {
@@ -230,7 +242,6 @@ describe('POST /api/auth/login — 用户登录', () => {
     const bcrypt = await import('bcryptjs');
     const passwordHash = await bcrypt.hash('Correct@123', 12);
     mockStep2(passwordHash, { failedAttempts: 4 });
-    mockPrisma.userTenant.update.mockResolvedValue({});
 
     const { POST } = await getRoute();
     const request = new Request('http://localhost:3000/api/auth/login', {
@@ -261,7 +272,6 @@ describe('POST /api/auth/login — 用户登录', () => {
     const response = await POST(request);
     const data = await response.json();
 
-    // 新两步登录流程只拦截 suspended 状态，invited 不拦截
     expect(data.success).toBe(true);
   });
 });
@@ -283,44 +293,31 @@ describe('POST /api/auth/logout — 用户登出', () => {
 });
 
 // ============================================================
-// me 测试
+// me 测试（已迁移 pg raw SQL）
 // ============================================================
 describe('GET /api/auth/me — 获取当前用户信息', () => {
   it('已登录 → 返回用户信息和权限', async () => {
     const token = await createAuthToken('user-001', 'tenant-001', false);
 
-    // API 现在分别查询 user、tenant、userTenant、userPermission、userOrganization
-    mockPrisma.user.findUnique.mockResolvedValue({
-      id: 'user-001',
-      email: 'test@example.com',
-      name: '测试用户',
-      avatarUrl: null,
+    mockPgClient.query.mockImplementation(async (sql: string) => {
+      const s = sql.toUpperCase();
+      // 查找用户
+      if (s.includes('FROM USERS') && s.includes('WHERE'))
+        return R([{ id: 'user-001', email: 'test@example.com', name: '测试用户', avatarUrl: null }]);
+      // 查找租户
+      if (s.includes('FROM TENANTS') && s.includes('WHERE'))
+        return R([{ id: 'tenant-001', name: '测试租户', slug: 'test-tenant', logoUrl: null }]);
+      // 查找 userTenant
+      if (s.includes('FROM USER_TENANTS') && s.includes('WHERE'))
+        return R([{ role: 'admin', status: 'active' }]);
+      // 查找用户权限（JOIN permissions）
+      if (s.includes('FROM USER_PERMISSIONS') && s.includes('INNER JOIN'))
+        return R([{ key: 'app.inspection.view', label: '查看巡检', type: 'app' }]);
+      // 查找用户组织
+      if (s.includes('FROM USER_ORGANIZATIONS'))
+        return R([]);
+      return R([]);
     });
-
-    mockPrisma.tenant.findUnique.mockResolvedValue({
-      id: 'tenant-001',
-      name: '测试租户',
-      slug: 'test-tenant',
-      logoUrl: null,
-    });
-
-    mockPrisma.userTenant.findUnique.mockResolvedValue({
-      role: 'admin',
-      status: 'active',
-    });
-
-    mockPrisma.userPermission.findMany.mockResolvedValue([
-      {
-        permission: {
-          key: 'app.inspection.view',
-          label: '查看巡检',
-          type: 'app',
-        },
-      },
-    ]);
-
-    mockPrisma.userOrganization.findFirst.mockResolvedValue(null);
-    mockPrisma.departmentPermission.findMany.mockResolvedValue([]);
 
     const { GET } = await import('@/app/api/auth/me/route');
 

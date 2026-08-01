@@ -4,10 +4,9 @@
 // ============================================================
 
 import { NextRequest } from "next/server";
-import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { success, unauthorized } from "@/lib/api-response";
-import { withTenantContext } from "@/lib/rls";
+import { withTenantContext, allRows } from "@/lib/rls-pg";
 
 interface DepartmentNode {
   id: string;
@@ -36,26 +35,27 @@ export async function GET(request: NextRequest) {
   const payload = await getAuthUser(request);
   if (!payload) return unauthorized();
 
-  const isGlobalAdmin = payload.role === "owner" || payload.role === "admin";
+  const isGlobalAdmin = payload.role === "owner";
 
   return withTenantContext(
-    payload.tenantId,
-    isGlobalAdmin,
-    async () => {
-      const departments = await db.department.findMany({
-        where: { tenantId: payload.tenantId },
-        include: {
-          _count: { select: { userOrgs: true } },
-        },
-        orderBy: { sortOrder: "asc" },
-      });
+    { tenantId: payload.tenantId, userId: payload.userId, isGlobalAdmin },
+    async (client) => {
+      const departmentsResult = await client.query(
+        `SELECT d.id, d.name, d."parentId", d."sortOrder",
+                coalesce(uc.cnt, 0)::int AS "userCount"
+         FROM departments d
+         LEFT JOIN (
+           SELECT "organizationId", count(*) AS cnt
+           FROM user_organizations
+           GROUP BY "organizationId"
+         ) uc ON uc."organizationId" = d.id
+         WHERE d."tenantId" = $1
+         ORDER BY d."sortOrder" ASC, d.id ASC`,
+        [payload.tenantId]
+      );
 
-      const flat = departments.map((d) => ({
-        id: d.id,
-        name: d.name,
-        parentId: d.parentId,
-        sortOrder: d.sortOrder,
-        userCount: d._count.userOrgs,
+      const flat = allRows<DepartmentNode>(departmentsResult).map((d) => ({
+        ...d,
         children: [] as DepartmentNode[],
       }));
 

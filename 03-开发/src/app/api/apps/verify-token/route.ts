@@ -8,12 +8,9 @@
 import { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { z } from "zod";
+import { JWT_SECRET } from "@/lib/auth";
 import { parseBody } from "@/lib/validate";
 import { success, error } from "@/lib/api-response";
-
-const APP_TOKEN_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-do-not-use-in-production"
-);
 
 const verifySchema = z.object({
   token: z.string().min(1),
@@ -27,7 +24,7 @@ export async function POST(request: NextRequest) {
   const { token, appSlug } = parsed.data;
 
   try {
-    const { payload } = await jwtVerify(token, APP_TOKEN_SECRET, {
+    const { payload } = await jwtVerify(token, JWT_SECRET, {
       issuer: "hubforge",
       audience: appSlug,
     });

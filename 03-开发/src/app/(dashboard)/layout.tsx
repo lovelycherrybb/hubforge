@@ -67,8 +67,8 @@ export default function DashboardLayout({
       {!isInApp && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 flex items-center justify-around h-14 lg:hidden">
           <BottomNavItem href="/" icon="home" label="首页" active={pathname === "/"} />
-          <BottomNavItem href="/" icon="apps" label="应用" active={false} />
-          <BottomNavItem href="/admin/users" icon="user" label="我的" active={pathname.startsWith("/admin")} />
+          <BottomNavItem href="/?tab=apps" icon="apps" label="应用" active={false} />
+          <BottomNavItem href="/profile" icon="user" label="我的" active={pathname === "/profile"} />
         </nav>
       )}
     </div>

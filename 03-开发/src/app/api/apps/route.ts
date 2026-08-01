@@ -5,8 +5,8 @@
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
+import { withTenantContext, firstRow, allRows, countValue } from "@/lib/rls-pg";
 import { parseBody, parseQuery, paginationSchema } from "@/lib/validate";
 import { success, created, error, forbidden, unauthorized, paginated } from "@/lib/api-response";
 
@@ -40,31 +40,58 @@ export async function GET(request: NextRequest) {
 
   const isAdmin = payload.role === "owner" || payload.role === "admin";
 
-  // 管理员可以看到所有状态的应用，普通成员只能看到活跃应用
-  const where = {
-    tenantId: payload.tenantId,
-    ...(isAdmin && status ? { status } : {}),
-    ...(!isAdmin ? { status: "active" } : {}),
-    ...(search && {
-      OR: [
-        { name: { contains: search, mode: "insensitive" as const } },
-        { description: { contains: search, mode: "insensitive" as const } },
-      ],
-    }),
-    ...(type && { type }),
-  };
+  return withTenantContext({ tenantId: payload.tenantId, userId: payload.userId, isGlobalAdmin: payload.role === "owner" }, async (client) => {
+    // 构建 WHERE 子句
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let idx = 0;
 
-  const [apps, total] = await Promise.all([
-    db.app.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-    }),
-    db.app.count({ where }),
-  ]);
+    // tenantId
+    idx++;
+    conditions.push(`"tenantId" = $${idx}`);
+    params.push(payload.tenantId);
 
-  return paginated(apps, total, page, pageSize);
+    // status：管理员可按指定 status 过滤，普通成员只看 active
+    if (isAdmin && status) {
+      idx++;
+      conditions.push(`status = $${idx}`);
+      params.push(status);
+    } else if (!isAdmin) {
+      idx++;
+      conditions.push(`status = $${idx}`);
+      params.push("active");
+    }
+
+    // search：名称或描述模糊匹配
+    if (search) {
+      idx++;
+      conditions.push(`("name" ILIKE $${idx} OR description ILIKE $${idx})`);
+      params.push(`%${search}%`);
+    }
+
+    // type 过滤
+    if (type) {
+      idx++;
+      conditions.push(`type = $${idx}`);
+      params.push(type);
+    }
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+    const offset = (page - 1) * pageSize;
+
+    const [appsResult, totalResult] = await Promise.all([
+      client.query(
+        `SELECT * FROM apps ${whereClause} ORDER BY "createdAt" DESC LIMIT $${idx + 1} OFFSET $${idx + 2}`,
+        [...params, pageSize, offset]
+      ),
+      client.query(
+        `SELECT count(*) FROM apps ${whereClause}`,
+        params
+      ),
+    ]);
+
+    return paginated(allRows(appsResult), countValue(totalResult), page, pageSize);
+  });
 }
 
 // POST — 注册新应用（需要 admin 或 owner 角色）
@@ -80,45 +107,97 @@ export async function POST(request: NextRequest) {
 
   const { name, slug, type, description, icon, url } = parsed.data;
 
-  // 检查 slug 在当前租户下唯一
-  const existing = await db.app.findFirst({
-    where: { slug, tenantId: payload.tenantId },
-  });
-  if (existing) return error("该应用标识已存在");
+  return withTenantContext({ tenantId: payload.tenantId, userId: payload.userId, isGlobalAdmin: payload.role === "owner" }, async (client) => {
+    // 检查 slug 在当前租户下唯一
+    const existing = firstRow(
+      await client.query(
+        'SELECT id FROM apps WHERE slug = $1 AND "tenantId" = $2',
+        [slug, payload.tenantId]
+      )
+    );
+    if (existing) return error("该应用标识已存在");
 
-  const app = await db.app.create({
-    data: {
-      name,
-      slug,
-      type,
-      description,
-      icon,
-      url,
-      tenantId: payload.tenantId,
-      createdBy: payload.userId,
-    },
-  });
+    const app = firstRow(
+      await client.query(
+        `INSERT INTO apps (name, slug, type, description, icon, url, "tenantId", "createdBy")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING *`,
+        [name, slug, type, description ?? null, icon ?? null, url, payload.tenantId, payload.userId]
+      )
+    );
 
-  // 自动创建框架级访问权限
-  const permKey = `app.${slug}.access`;
-  const existingPerm = await db.permission.findFirst({
-    where: { key: permKey, type: "framework", tenantId: null },
-  });
-  if (!existingPerm) {
-    await db.permission.create({
-      data: {
-        key: permKey,
-        label: `访问 ${name}`,
-        type: "framework",
-        // tenantId 和 appId 均为 null → 全局框架权限
-      },
-    });
-  }
+    // 自动分配应用给当前租户
+    await client.query(
+      'INSERT INTO tenant_apps ("tenantId", "appId", enabled) VALUES ($1, $2, true)',
+      [payload.tenantId, app!.id]
+    );
 
-  // 自动分配给当前租户
-  await db.tenantApp.create({
-    data: { tenantId: payload.tenantId, appId: app.id, enabled: true },
-  });
+    // 框架权限处理（取决于角色）
+    const permKey = `app.${slug}.access`;
 
-  return created(app);
+    if (payload.role === "owner") {
+      // owner：创建全局框架权限 + 授予当前租户
+      const existingPerm = firstRow(
+        await client.query(
+          'SELECT id FROM permissions WHERE key = $1 AND type = $2 AND "tenantId" IS NULL',
+          [permKey, "framework"]
+        )
+      );
+      if (!existingPerm) {
+        const perm = firstRow(
+          await client.query(
+            `INSERT INTO permissions (key, label, type)
+             VALUES ($1, $2, $3)
+             RETURNING *`,
+            [permKey, `访问 ${name}`, "framework"]
+          )
+        );
+        // 授予当前租户
+        await client.query(
+          'INSERT INTO tenant_permissions ("tenantId", "permissionId") VALUES ($1, $2)',
+          [payload.tenantId, perm!.id]
+        );
+      } else {
+        // 框架权限已存在，确保当前租户已获得授予
+        const existingGrant = firstRow(
+          await client.query(
+            'SELECT id FROM tenant_permissions WHERE "tenantId" = $1 AND "permissionId" = $2',
+            [payload.tenantId, existingPerm.id]
+          )
+        );
+        if (!existingGrant) {
+          await client.query(
+            'INSERT INTO tenant_permissions ("tenantId", "permissionId") VALUES ($1, $2)',
+            [payload.tenantId, existingPerm.id]
+          );
+        }
+      }
+    } else {
+      // admin：不创建全局框架权限（应由 owner 管理）
+      // 如果框架权限已存在，确保当前租户已获得授予
+      const existingPerm = firstRow(
+        await client.query(
+          'SELECT id FROM permissions WHERE key = $1 AND type = $2 AND "tenantId" IS NULL',
+          [permKey, "framework"]
+        )
+      );
+      if (existingPerm) {
+        const existingGrant = firstRow(
+          await client.query(
+            'SELECT id FROM tenant_permissions WHERE "tenantId" = $1 AND "permissionId" = $2',
+            [payload.tenantId, existingPerm.id]
+          )
+        );
+        if (!existingGrant) {
+          await client.query(
+            'INSERT INTO tenant_permissions ("tenantId", "permissionId") VALUES ($1, $2)',
+            [payload.tenantId, existingPerm.id]
+          );
+        }
+      }
+      // 如果框架权限不存在，admin 无法创建——需要 owner 后续补充
+    }
+
+    return created(app);
+  });
 }
